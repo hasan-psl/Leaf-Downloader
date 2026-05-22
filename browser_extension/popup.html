@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <div class="popup-header">
+      <img src="icons/icon-48.png" alt="Leaf" class="popup-logo">
+      <div class="popup-title">
+        <span class="title-text">Leaf Downloader</span>
+        <span class="version-text">v1.0.0</span>
+      </div>
+    </div>
+
+    <div class="status-section">
+      <div class="status-row">
+        <span class="status-dot" id="statusDot"></span>
+        <span class="status-text" id="statusText">Checking...</span>
+      </div>
+    </div>
+
+    <div class="actions-section">
+      <button id="sendUrlBtn" class="action-btn primary" disabled>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v12"/>
+          <path d="M8 11l4 4 4-4"/>
+          <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+        </svg>
+        Send Current Tab
+      </button>
+    </div>
+
+    <div class="feedback" id="feedback"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

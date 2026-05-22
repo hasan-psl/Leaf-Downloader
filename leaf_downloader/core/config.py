@@ -20,7 +20,13 @@ class ConfigManager:
         self.history_file = os.path.join(CONFIG_DIR, "history.json")
         self.queue_file = os.path.join(CONFIG_DIR, "queue.json")
         
-        self.settings = self._load(self.settings_file, {"multithread": False, "fragments": 4})
+        self.settings = self._load(self.settings_file, {
+            "multithread": False,
+            "fragments": 4,
+            "monitor_clipboard": False,
+            "api_server_enabled": True,
+            "api_server_port": 9549
+        })
         self.history = self._load(self.history_file, [])
         self.queue = self._load(self.queue_file, [])
         

@@ -30,6 +30,15 @@ class SettingsPage(Gtk.Box):
         self.row_dir.add_suffix(select_btn)
         
         general_group.add(self.row_dir)
+        
+        # Monitor Clipboard row
+        self.clipboard_row = Adw.SwitchRow()
+        self.clipboard_row.set_title("Monitor Clipboard")
+        self.clipboard_row.set_subtitle("Automatically detect media URLs copied to clipboard.")
+        self.clipboard_row.set_active(self.config.get_setting("monitor_clipboard", False))
+        self.clipboard_row.connect("notify::active", self.on_clipboard_toggled)
+        general_group.add(self.clipboard_row)
+        
         self.preferences.add(general_group)
         
         # Performance Group
@@ -74,12 +83,62 @@ class SettingsPage(Gtk.Box):
         self.fragment_row.set_visible(self.config.get_setting("multithread", False))
         
         self.preferences.add(perf_group)
+        
+        # Browser Integration Group
+        browser_group = Adw.PreferencesGroup()
+        browser_group.set_title("Browser Integration")
+        browser_group.set_description("Receive download URLs from the Leaf Firefox extension.")
+        
+        # API Server Toggle
+        self.api_server_row = Adw.SwitchRow()
+        self.api_server_row.set_title("Extension Server")
+        self.api_server_row.set_active(self.config.get_setting("api_server_enabled", True))
+        self.api_server_row.connect("notify::active", self.on_api_server_toggled)
+        browser_group.add(self.api_server_row)
+        
+        # Update subtitle based on state
+        self._update_api_server_subtitle()
+        
+        self.preferences.add(browser_group)
+        
         self.append(self.preferences)
+        
+    def _update_api_server_subtitle(self):
+        """Update the API server row subtitle to show current status."""
+        enabled = self.config.get_setting("api_server_enabled", True)
+        port = self.config.get_setting("api_server_port", 9549)
+        if enabled:
+            self.api_server_row.set_subtitle(f"Listening on 127.0.0.1:{port}")
+        else:
+            self.api_server_row.set_subtitle("Server disabled. Extension cannot connect.")
         
     def on_multithread_toggled(self, switch, *args):
         active = switch.get_active()
         self.config.set_setting("multithread", active)
         self.fragment_row.set_visible(active)
+        
+    def on_clipboard_toggled(self, switch, *args):
+        active = switch.get_active()
+        self.config.set_setting("monitor_clipboard", active)
+        
+    def on_api_server_toggled(self, switch, *args):
+        active = switch.get_active()
+        self.config.set_setting("api_server_enabled", active)
+        self._update_api_server_subtitle()
+        
+        # Start or stop the server live
+        from gi.repository import Gio
+        app = Gio.Application.get_default()
+        if app and hasattr(app, 'api_server'):
+            if active:
+                if not app.api_server or not app.api_server.is_running():
+                    from leaf_downloader.core.api_server import ApiServer
+                    port = self.config.get_setting("api_server_port", 9549)
+                    app.api_server = ApiServer(port=port)
+                    app.api_server.start()
+            else:
+                if app.api_server and app.api_server.is_running():
+                    app.api_server.stop()
         
     def on_apply_fragments(self, btn):
         value = int(self.fragment_spin.get_value())
@@ -111,3 +170,4 @@ class SettingsPage(Gtk.Box):
         window = self.get_root()
         if window:
             dialog.select_folder(window, None, on_folder_selected)
+

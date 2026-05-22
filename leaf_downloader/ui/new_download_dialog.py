@@ -186,6 +186,10 @@ class NewDownloadDialog(Adw.Dialog):
         )
         confirm.present(self.parent_window)
 
+    def set_url_and_fetch(self, url):
+        self.url_entry.set_text(url)
+        self.on_fetch_clicked(self.fetch_btn)
+
     def on_url_changed(self, entry):
         url = entry.get_text().strip()
         # Basic URL validation

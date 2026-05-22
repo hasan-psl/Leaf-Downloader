@@ -1,0 +1,155 @@
+/*
+ * Leaf Downloader — Popup Styles
+ * Dark theme matching the GTK4 app aesthetic
+ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+  background: #1e1e2e;
+  color: #cdd6f4;
+  min-width: 280px;
+}
+
+.popup-container {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Header */
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(205, 214, 244, 0.08);
+}
+
+.popup-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+
+.popup-title {
+  display: flex;
+  flex-direction: column;
+}
+
+.title-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: #cdd6f4;
+  letter-spacing: 0.2px;
+}
+
+.version-text {
+  font-size: 11px;
+  color: #6c7086;
+}
+
+/* Status */
+.status-section {
+  padding: 10px 12px;
+  background: rgba(205, 214, 244, 0.04);
+  border-radius: 10px;
+  border: 1px solid rgba(205, 214, 244, 0.06);
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.status-dot.online {
+  background: #a6e3a1;
+  box-shadow: 0 0 8px rgba(166, 227, 161, 0.5);
+}
+
+.status-dot.offline {
+  background: #f38ba8;
+  box-shadow: 0 0 8px rgba(243, 139, 168, 0.3);
+}
+
+.status-text {
+  font-size: 13px;
+  color: #bac2de;
+}
+
+/* Actions */
+.actions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.action-btn.primary {
+  background: linear-gradient(135deg, #89b4fa, #74c7ec);
+  color: #1e1e2e;
+}
+
+.action-btn.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #74c7ec, #89dceb);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(137, 180, 250, 0.3);
+}
+
+.action-btn.primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.action-btn svg {
+  flex-shrink: 0;
+}
+
+/* Feedback */
+.feedback {
+  font-size: 12px;
+  text-align: center;
+  min-height: 16px;
+  transition: opacity 0.2s ease;
+}
+
+.feedback.success {
+  color: #a6e3a1;
+}
+
+.feedback.error {
+  color: #f38ba8;
+}

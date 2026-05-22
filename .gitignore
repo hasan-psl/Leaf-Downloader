@@ -1,6 +1,40 @@
-node_modules/
-.env
-dist/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 build/
-.cache/
+dist/
+.eggs/
+*.egg-info/
+*.egg
+
+# Virtual Environments
+venv/
+env/
+.env
+.venv/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs and Caches
 *.log
+.cache/
+.pytest_cache/
+
+# Node (for browser extension)
+node_modules/
+
+# Application specific
+downloads.json
+queue.json
+settings.json
+history.json
+*.png
