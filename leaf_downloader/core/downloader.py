@@ -105,20 +105,23 @@ class DownloadTask:
         config = ConfigManager()
         
         formats = self.format_id
-        if self.audio_format_id:
-            formats += f"+{self.audio_format_id}"
-            
         # Build output template: user-edited name with static ext
         out_template = f"{self.title}.%(ext)s"
             
         cmd = [
             "yt-dlp",
-            "-f", formats,
             "--newline",
             "-P", self.dest_dir,
-            "-o", out_template,
-            self.url
+            "-o", out_template
         ]
+        
+        if formats and formats != "direct":
+            formats_str = formats
+            if self.audio_format_id:
+                formats_str += f"+{self.audio_format_id}"
+            cmd.extend(["-f", formats_str])
+            
+        cmd.append(self.url)
         
         # Add multithreading if enabled
         if config.get_setting("multithread", False):

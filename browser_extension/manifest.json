@@ -10,7 +10,8 @@
   ],
 
   "host_permissions": [
-    "http://127.0.0.1:9549/*"
+    "http://127.0.0.1:9549/*",
+    "<all_urls>"
   ],
 
   "icons": {
@@ -36,8 +37,8 @@
   "content_scripts": [
     {
       "matches": [
-        "*://*.youtube.com/*",
-        "*://youtu.be/*"
+        "http://*/*",
+        "https://*/*"
       ],
       "js": ["content.js"],
       "css": ["content.css"],

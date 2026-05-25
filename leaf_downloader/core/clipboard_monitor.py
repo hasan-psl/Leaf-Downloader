@@ -67,30 +67,25 @@ class ClipboardMonitor:
         self.last_url = None
 
     def on_clipboard_changed(self, clipboard):
-        print(f"Clipboard changed event triggered! Monitor setting: {self.config.get_setting('monitor_clipboard')}")
         if not self.config.get_setting("monitor_clipboard", False):
             return
             
-        print("Reading clipboard text...")
         clipboard.read_text_async(None, self.on_text_ready)
 
     def on_text_ready(self, clipboard, result):
         try:
             text = clipboard.read_text_finish(result)
-            print(f"Clipboard text read: {text}")
             if not text:
                 return
             text = text.strip()
             
             is_media = self.is_media_url(text)
-            print(f"Is media URL? {is_media}, Last URL: {self.last_url}")
             
             if is_media and text != self.last_url:
                 self.last_url = text
-                print("Sending notification...")
                 self.show_notification(text)
         except Exception as e:
-            print(f"Error reading clipboard text: {e}")
+            print(f"[Clipboard Monitor] Error reading clipboard text: {e}")
 
     def is_media_url(self, text):
         if not text:
