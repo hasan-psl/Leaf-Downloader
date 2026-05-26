@@ -15,6 +15,9 @@ Welcome to **Leaf-Downloader**, a high-performance desktop download manager desi
 
 ---
 
+<img width="950" height="750" alt="image" src="https://github.com/user-attachments/assets/d3f71ab7-87b4-4870-b7ed-524e304376fa" />
+
+
 ## ✨ Features
 
 ### 🚀 Dual Download Engine
@@ -75,15 +78,25 @@ A fully functional, feature-rich Firefox extension bridges the browser to the de
 - **Dark Mode**: Forces `Adw.ColorScheme.PREFER_DARK` on startup for a premium dark aesthetic
 - **Automatic app hold**: Application runs in the background even when the window is closed, keeping the API server and clipboard monitor alive
 
+<img width="1177" height="927" alt="New Download Dialog" src="https://github.com/user-attachments/assets/14c50edd-f0cc-49f6-a116-c965c3434cba" />
+<img width="1177" height="927" alt="IDM-style Download Confirmation Dialog" src="https://github.com/user-attachments/assets/ceaf58e5-deb3-42a2-a2d9-7783c89409a0" />
+<img width="600" height="473" alt="Standalone Download Card Windows" src="https://github.com/user-attachments/assets/d8b197ed-6ab0-485f-945e-782debb0fddc" />
+
+
+
+
 ---
 
 ### 📋 Intelligent Clipboard Monitoring
 
 - Watches the system clipboard via `Gdk.Clipboard` for copied media URLs
-- Recognizes **YouTube** (`youtube.com`, `youtu.be`), **Reddit** (`reddit.com`), and **direct media files** (`.mp4`, `.webm`, `.mkv`, `.mp3`, `.m4a`, `.avi`, `.ogg`, `.wav`)
+- Recognizes **YouTube** (`youtube.com`, `youtu.be`), and **direct media files** (`.mp4`, `.webm`, `.mkv`, `.mp3`, `.m4a`, `.avi`, `.ogg`, `.wav`)
 - On detection, pops up a **native GTK4 window** (non-intrusive) with "Ignore" and "Download" actions — no notification daemon required
 - Deduplicates: the same URL won't trigger the popup twice in a row
 - Opt-in via the Settings page (disabled by default)
+
+<img width="450" height="230" alt="This is how the clipboard url detection pop-up looks" src="https://github.com/user-attachments/assets/e8b123c3-6ea3-4d44-9e44-8f31dd5bfe66" />
+
 
 ---
 
@@ -186,6 +199,9 @@ The Firefox extension must currently be loaded manually as a temporary add-on:
 > **Note:** Leaf-Downloader must be running in the background for the extension to communicate with the local API server on `127.0.0.1:9549`.
 
 ---
+<img width="949" height="761" alt="How it looks after loading the temporary extension" src="https://github.com/user-attachments/assets/2deb829b-c179-448d-8559-0c680049e0bf" />
+
+
 
 ## 🗺️ Roadmap & Future Plans
 
