@@ -25,7 +25,9 @@ class ConfigManager:
             "fragments": 4,
             "monitor_clipboard": False,
             "api_server_enabled": True,
-            "api_server_port": 9549
+            "api_server_port": 9549,
+            "direct_download_max_retries": 3,
+            "direct_download_timeout": 30
         })
         self.history = self._load(self.history_file, [])
         self.queue = self._load(self.queue_file, [])

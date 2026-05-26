@@ -1,18 +1,21 @@
 /**
  * Leaf Downloader — Background Service Worker
- * 
- * Polls the desktop app's API server to check connectivity
- * and updates the extension badge accordingly.
+ *
+ * - Polls the desktop app's API server for connectivity
+ * - Updates the extension badge
+ * - Registers a "Download with App" right-click context menu
+ * - Forwards context menu clicks to content.js for popup display
  */
 
 const API_BASE = "http://127.0.0.1:9549";
-const POLL_INTERVAL = 5000; // 5 seconds
+const POLL_INTERVAL = 5000; // ms
 
 let isAppRunning = false;
 
-/**
- * Check if the desktop app is reachable
- */
+// ---------------------------------------------------------------------------
+// App connectivity polling
+// ---------------------------------------------------------------------------
+
 async function checkAppStatus() {
   try {
     const controller = new AbortController();
@@ -39,9 +42,6 @@ async function checkAppStatus() {
   }
 }
 
-/**
- * Update the extension badge to show app status
- */
 function updateBadge(online) {
   if (online) {
     browser.action.setBadgeText({ text: "ON" });
@@ -54,11 +54,60 @@ function updateBadge(online) {
   }
 }
 
-// Start polling
 checkAppStatus();
 setInterval(checkAppStatus, POLL_INTERVAL);
 
-// Listen for messages from popup
+// ---------------------------------------------------------------------------
+// Context menus
+// ---------------------------------------------------------------------------
+
+// Remove any previously registered menus first to avoid duplicates on reload
+browser.contextMenus.removeAll().then(() => {
+  // Shown when right-clicking on a link
+  browser.contextMenus.create({
+    id: "leaf-download-link",
+    title: "Download with App",
+    contexts: ["link"],
+  });
+
+  // Shown when right-clicking on a video element
+  browser.contextMenus.create({
+    id: "leaf-download-video",
+    title: "Download with App",
+    contexts: ["video"],
+  });
+
+  // Shown on any page (selection or background click)
+  browser.contextMenus.create({
+    id: "leaf-download-page",
+    title: "Download Page Video with App",
+    contexts: ["page", "selection"],
+  });
+});
+
+browser.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (!tab?.id) return;
+
+  // Build the payload for content.js
+  const payload = {
+    type: "contextMenuDownload",
+    linkUrl: info.linkUrl || null,
+    srcUrl: info.srcUrl || null,
+    pageUrl: info.pageUrl || tab.url || null,
+  };
+
+  try {
+    await browser.tabs.sendMessage(tab.id, payload);
+  } catch (err) {
+    // Content script may not be injected (e.g. about: pages) — ignore
+    console.warn("[Leaf] Could not send context menu message:", err.message);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Message listener (from popup.js or content.js)
+// ---------------------------------------------------------------------------
+
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "getStatus") {
     sendResponse({ running: isAppRunning });

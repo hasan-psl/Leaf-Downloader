@@ -381,6 +381,25 @@
   border-color: rgba(74, 222, 128, 0.2);
 }
 
+/* Direct file download badge — cyan accent */
+.leaf-badge-direct {
+  background: rgba(34, 211, 238, 0.1);
+  color: #22d3ee;
+  border-color: rgba(34, 211, 238, 0.25);
+}
+
+/* Empty state when no formats are found */
+.leaf-popup-no-formats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 12px;
+  font-size: 12px;
+  color: #888888;
+  text-align: center;
+  font-style: italic;
+}
+
 /* Skeleton loader animations */
 @keyframes leaf-skeleton-pulse {
 

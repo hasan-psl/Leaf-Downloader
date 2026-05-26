@@ -6,7 +6,8 @@
   "author": "Leaf-Downloader",
 
   "permissions": [
-    "activeTab"
+    "activeTab",
+    "contextMenus"
   ],
 
   "host_permissions": [

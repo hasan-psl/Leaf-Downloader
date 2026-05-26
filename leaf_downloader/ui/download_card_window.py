@@ -334,30 +334,63 @@ class DownloadCardWindow(Adw.Window):
         cr.stroke()
         
     def draw_progress(self, area, cr, width, height, user_data=None):
-        # Draw IDM style segmented progress bar
-        segment_count = self.fragments
-        segment_width = (width - (segment_count - 1) * 2) / segment_count
+        # Check if this is a direct download with real per-chunk progress data
+        chunk_progress = getattr(self.task, 'chunk_progress', None)
         
-        fraction = self.current_percent / 100.0
-        filled_width = width * fraction
-        
-        for i in range(segment_count):
-            x = i * (segment_width + 2)
-            y = 0
+        if chunk_progress and len(chunk_progress) > 0:
+            # Real per-chunk progress — each segment fills independently
+            segment_count = len(chunk_progress)
+            gap = 2
+            segment_width = (width - (segment_count - 1) * gap) / segment_count
             
-            # Segment Background
-            cr.set_source_rgba(0.2, 0.2, 0.2, 0.1)
-            cr.rectangle(x, y, segment_width, height)
-            cr.fill()
-            
-            # Segment Foreground
-            if filled_width > x:
-                fill_w = min(segment_width, filled_width - x)
-                cr.set_source_rgba(0.1, 0.8, 0.3, 0.8) # Greenish accent
-                cr.rectangle(x, y, fill_w, height)
+            for i, frac in enumerate(chunk_progress):
+                x = i * (segment_width + gap)
+                
+                # Segment Background
+                cr.set_source_rgba(0.2, 0.2, 0.2, 0.1)
+                cr.rectangle(x, 0, segment_width, height)
                 cr.fill()
                 
-                # Glossy highlight
-                cr.set_source_rgba(1.0, 1.0, 1.0, 0.15)
-                cr.rectangle(x, y, fill_w, height / 2)
+                # Segment Foreground (filled portion)
+                if frac > 0:
+                    fill_w = segment_width * min(frac, 1.0)
+                    
+                    # Color: green for complete, blue-ish for in-progress
+                    if frac >= 1.0:
+                        cr.set_source_rgba(0.1, 0.8, 0.3, 0.8)  # Green — done
+                    else:
+                        cr.set_source_rgba(0.2, 0.5, 0.9, 0.8)  # Blue — downloading
+                    cr.rectangle(x, 0, fill_w, height)
+                    cr.fill()
+                    
+                    # Glossy highlight
+                    cr.set_source_rgba(1.0, 1.0, 1.0, 0.15)
+                    cr.rectangle(x, 0, fill_w, height / 2)
+                    cr.fill()
+        else:
+            # Existing yt-dlp behavior: simulated segmented bar from single progress value
+            segment_count = self.fragments
+            segment_width = (width - (segment_count - 1) * 2) / segment_count
+            
+            fraction = self.current_percent / 100.0
+            filled_width = width * fraction
+            
+            for i in range(segment_count):
+                x = i * (segment_width + 2)
+                
+                # Segment Background
+                cr.set_source_rgba(0.2, 0.2, 0.2, 0.1)
+                cr.rectangle(x, 0, segment_width, height)
                 cr.fill()
+                
+                # Segment Foreground
+                if filled_width > x:
+                    fill_w = min(segment_width, filled_width - x)
+                    cr.set_source_rgba(0.1, 0.8, 0.3, 0.8)
+                    cr.rectangle(x, 0, fill_w, height)
+                    cr.fill()
+                    
+                    # Glossy highlight
+                    cr.set_source_rgba(1.0, 1.0, 1.0, 0.15)
+                    cr.rectangle(x, 0, fill_w, height / 2)
+                    cr.fill()

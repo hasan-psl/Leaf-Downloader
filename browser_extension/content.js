@@ -1,11 +1,14 @@
 /**
  * Leaf Downloader — Firefox Extension Content Script
- * 
+ *
  * Injected into all pages to provide a highly stable download bridge.
  * Features:
- * - Ultra-robust YouTube SPA URL polling safety net
- * - Ultra-lightweight controls-only MutationObserver (0% CPU impact)
- * - Universal hover video overlay for Facebook, Instagram, Reddit, X, and direct links
+ * - YouTube SPA URL polling safety net
+ * - Lightweight controls-only MutationObserver for YouTube
+ * - Universal hover video overlay for any page with <video> elements
+ * - MutationObserver for dynamically loaded video elements
+ * - Context menu "Download with App" integration via background.js
+ * - Deduplication via WeakSet to avoid double hover-bar injection
  */
 
 const API_BASE = "http://127.0.0.1:9549";
@@ -14,13 +17,14 @@ const POPUP_ID = "leaf-popup-menu";
 const HOVER_BAR_ID = "leaf-hover-bar";
 
 let lastUrl = window.location.href;
-let hoverTimeout = null;
-let activeVideo = null;
-let activeBar = null;
 
-/**
- * Format bytes into readable filesize
- */
+// Tracks which <video> elements already have a hover bar attached
+const attachedVideos = new WeakSet();
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
 function formatBytes(bytes) {
   if (!bytes) return "Unknown size";
   const mb = bytes / (1024 * 1024);
@@ -28,8 +32,67 @@ function formatBytes(bytes) {
 }
 
 /**
- * Create the YouTube player controls download button
+ * Returns true if this page is a YouTube video watch/shorts page.
+ * Only YouTube uses yt-dlp; everything else gets direct download.
  */
+function isYouTube() {
+  const host = window.location.hostname;
+  return host.includes("youtube.com") || host.includes("youtu.be");
+}
+
+/**
+ * Extract a usable (non-blob) video source URL from a <video> element.
+ * Checks `src` attr first, then <source> children.
+ * Returns null if only blob: URLs are found (HLS/DASH in-browser streams
+ * that can't be fetched directly).
+ */
+function getVideoSourceUrl(video) {
+  // Direct src attribute
+  if (video.src && !video.src.startsWith("blob:") && video.src.startsWith("http")) {
+    return video.src;
+  }
+  // <source> children
+  const sources = video.querySelectorAll("source");
+  for (const srcEl of sources) {
+    if (srcEl.src && !srcEl.src.startsWith("blob:") && srcEl.src.startsWith("http")) {
+      return srcEl.src;
+    }
+  }
+  // currentSrc fallback (set by browser after source selection)
+  if (video.currentSrc && !video.currentSrc.startsWith("blob:") && video.currentSrc.startsWith("http")) {
+    return video.currentSrc;
+  }
+  return null;
+}
+
+/**
+ * Decide the best URL to send for a given video element.
+ *
+ * - For YouTube:  always send window.location.href → yt-dlp handles it
+ * - For everything else: prefer the direct video src URL. If no direct src
+ *   is found (blob: only), fall back to page URL with is_direct_fallback=true
+ *   so the API server probes it generically.
+ *
+ * Returns { url, isDirectFallback }
+ */
+function resolveDownloadUrl(video) {
+  if (isYouTube()) {
+    return { url: window.location.href, isDirectFallback: false };
+  }
+
+  const srcUrl = getVideoSourceUrl(video);
+  if (srcUrl) {
+    return { url: srcUrl, isDirectFallback: false };
+  }
+
+  // No direct src (blob: or nothing) — send page URL, tell server it's a fallback
+  return { url: window.location.href, isDirectFallback: true };
+}
+
+// ---------------------------------------------------------------------------
+// YouTube injection
+// ---------------------------------------------------------------------------
+
 function createDownloadButton() {
   const btn = document.createElement("button");
   btn.id = BUTTON_ID;
@@ -37,7 +100,6 @@ function createDownloadButton() {
   btn.title = "Download with Leaf";
   btn.setAttribute("aria-label", "Download with Leaf Downloader");
 
-  // SVG download icon
   btn.innerHTML = `
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="leaf-dl-icon">
       <path d="M12 3v12"/>
@@ -51,9 +113,6 @@ function createDownloadButton() {
   return btn;
 }
 
-/**
- * Handle download button click — toggle or create floating popup
- */
 function handleDownloadClick(e) {
   e.preventDefault();
   e.stopPropagation();
@@ -67,12 +126,9 @@ function handleDownloadClick(e) {
     return;
   }
 
-  showFloatingPopup(player);
+  showYouTubePopup(player);
 }
 
-/**
- * Close popup with transition
- */
 function closePopup(popup) {
   if (!popup) return;
   popup.classList.add("leaf-fade-out");
@@ -81,15 +137,8 @@ function closePopup(popup) {
   }, 200);
 }
 
-/**
- * Create and show the floating popup menu with skeleton loaders
- */
-function showFloatingPopup(player) {
-  const popup = document.createElement("div");
-  popup.id = POPUP_ID;
-  popup.className = "leaf-popup-card leaf-fade-in";
-
-  popup.innerHTML = `
+function buildPopupSkeleton() {
+  return `
     <div class="leaf-popup-header">
       <div class="leaf-popup-brand-row">
         <span class="leaf-popup-brand-title">Leaf Downloader</span>
@@ -111,28 +160,109 @@ function showFloatingPopup(player) {
       </div>
     </div>
   `;
+}
 
+function attachCloseBtn(popup) {
   const closeBtn = popup.querySelector(".leaf-popup-close-btn");
-  closeBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    closePopup(popup);
-  });
+  if (closeBtn) {
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closePopup(popup);
+    });
+  }
+}
+
+function showYouTubePopup(player) {
+  const popup = document.createElement("div");
+  popup.id = POPUP_ID;
+  popup.className = "leaf-popup-card leaf-fade-in";
+  popup.innerHTML = buildPopupSkeleton();
+  attachCloseBtn(popup);
 
   player.appendChild(popup);
-
-  // Position absolutely inside the player
   popup.style.position = "absolute";
   popup.style.bottom = "55px";
   popup.style.right = "12px";
   popup.style.zIndex = "2001";
 
-  fetchMetadata(window.location.href, popup);
+  // YouTube always uses the page URL — yt-dlp backend
+  fetchMetadata(window.location.href, popup, false, null);
 }
 
+function injectButton() {
+  if (document.getElementById(BUTTON_ID)) return;
+
+  const rightControls = document.querySelector(".ytp-right-controls");
+  if (!rightControls) return;
+
+  const btn = createDownloadButton();
+  rightControls.insertBefore(btn, rightControls.firstChild);
+}
+
+function removeButton() {
+  const existing = document.getElementById(BUTTON_ID);
+  if (existing) existing.remove();
+
+  const popup = document.getElementById(POPUP_ID);
+  if (popup) popup.remove();
+}
+
+function isWatchPage() {
+  return isYouTube() &&
+    (window.location.pathname === "/watch" || window.location.pathname.startsWith("/shorts/"));
+}
+
+function tryInject() {
+  if (!isWatchPage()) {
+    removeButton();
+    return;
+  }
+
+  injectButton();
+
+  if (!document.getElementById(BUTTON_ID)) {
+    const retryInterval = setInterval(() => {
+      if (document.getElementById(BUTTON_ID) || !isWatchPage()) {
+        clearInterval(retryInterval);
+        return;
+      }
+      injectButton();
+    }, 500);
+
+    setTimeout(() => clearInterval(retryInterval), 10000);
+  }
+}
+
+function setupLightweightObserver() {
+  if (!isYouTube()) return;
+
+  const target = document.querySelector(".ytp-right-controls");
+  if (target) {
+    const observer = new MutationObserver(() => {
+      if (isWatchPage() && !document.getElementById(BUTTON_ID)) {
+        injectButton();
+      }
+    });
+    observer.observe(target, { childList: true });
+  } else {
+    setTimeout(setupLightweightObserver, 1000);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Metadata fetching and popup rendering
+// ---------------------------------------------------------------------------
+
 /**
- * Fetch video metadata from local API
+ * Fetch video metadata from the local desktop app API.
+ *
+ * @param {string} url          - URL to fetch metadata for (page or direct media)
+ * @param {Element} popup       - The popup DOM element to render into
+ * @param {boolean} isDirectFallback - Tell API to treat as generic direct link
+ * @param {string|null} videoSrcUrl  - The actual direct video URL for download dispatch
+ *                                     (may differ from `url` which could be page URL)
  */
-async function fetchMetadata(url, popup, isDirectFallback = false) {
+async function fetchMetadata(url, popup, isDirectFallback, videoSrcUrl) {
   try {
     const response = await fetch(`${API_BASE}/api/metadata`, {
       method: "POST",
@@ -145,16 +275,26 @@ async function fetchMetadata(url, popup, isDirectFallback = false) {
     }
 
     const data = await response.json();
-    renderMetadata(data, popup, url);
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    // The actual download URL: for direct links use videoSrcUrl (the src attr),
+    // for YouTube use the page URL (which yt-dlp will resolve)
+    const downloadUrl = videoSrcUrl || url;
+
+    renderMetadata(data, popup, downloadUrl);
   } catch (err) {
-    renderError(popup);
+    console.warn("[Leaf] Metadata fetch failed:", err.message);
+    renderError(popup, url, isDirectFallback, videoSrcUrl);
   }
 }
 
 /**
- * Populate popup card with actual metadata and qualities list
+ * Populate popup with metadata and format list.
+ * downloadUrl is the URL that will actually be sent to the download API.
  */
-function renderMetadata(data, popup, url) {
+function renderMetadata(data, popup, downloadUrl) {
   const header = popup.querySelector(".leaf-popup-video-info");
   const content = popup.querySelector(".leaf-popup-content");
 
@@ -174,12 +314,13 @@ function renderMetadata(data, popup, url) {
   }
 
   let listHtml = `<div class="leaf-formats-list">`;
-  
+
   data.formats.forEach((f, idx) => {
     const isAudio = f.type === "Audio Only";
-    const sizeStr = f.size > 0 ? formatBytes(f.size) : "Direct Stream";
+    const isDirect = f.format_id === "direct";
+    const sizeStr = f.size > 0 ? formatBytes(f.size) : (isDirect ? "Direct File" : "Unknown size");
     const fpsStr = f.fps ? `${f.fps}fps` : "";
-    
+
     let resolutionLabel = "";
     let subDetails = "";
     let badgeHtml = "";
@@ -188,10 +329,16 @@ function renderMetadata(data, popup, url) {
       const abrStr = f.abr ? ` (${f.abr}kbps)` : "";
       resolutionLabel = `Audio (${f.ext})${abrStr}`;
       subDetails = `Audio: ${f.acodec || "unknown"}`;
+      badgeHtml = `<span class="leaf-format-badge leaf-badge-muxed">Audio</span>`;
+    } else if (isDirect) {
+      // Direct file download (mp4, mkv, zip, etc.)
+      resolutionLabel = `Direct Download (.${f.ext})`;
+      subDetails = `Segmented HTTP download via native engine`;
+      badgeHtml = `<span class="leaf-format-badge leaf-badge-direct">Direct</span>`;
     } else {
       const fpsLabel = fpsStr ? ` @ ${fpsStr}` : "";
-      resolutionLabel = `${f.height}${f.height !== "Direct" ? 'p' : ''}${fpsLabel} (${f.ext})`;
-      
+      resolutionLabel = `${f.height}p${fpsLabel} (${f.ext})`;
+
       const vcodec = f.vcodec || "unknown";
       if (f.merged) {
         subDetails = `Video + Audio (Merged automatically)`;
@@ -248,17 +395,26 @@ function renderMetadata(data, popup, url) {
       const idx = parseInt(btn.getAttribute("data-index"));
       const f = data.formats[idx];
       const isAudio = f.type === "Audio Only";
-      const resolutionLabel = isAudio ? `Audio (${f.ext})` : `${f.height}${f.height !== "Direct" ? 'p' : ''}`;
-      
-      await startDownload(url, data.title, f, resolutionLabel, popup, btn);
+      const isDirect = f.format_id === "direct";
+      let resolutionLabel;
+      if (isDirect) {
+        resolutionLabel = f.ext.toUpperCase();
+      } else if (isAudio) {
+        resolutionLabel = `Audio (${f.ext})`;
+      } else {
+        resolutionLabel = `${f.height}p`;
+      }
+
+      await startDownload(downloadUrl, data.title, f, resolutionLabel, popup, btn);
     });
   });
 }
 
 /**
- * Handle direct download dispatch
+ * Dispatch a download request to the desktop app.
+ * downloadUrl must be the actual file/video URL, not the page URL.
  */
-async function startDownload(url, title, format, resolution, popup, button) {
+async function startDownload(downloadUrl, title, format, resolution, popup, button) {
   button.classList.add("leaf-format-loading");
   const origContent = button.innerHTML;
   button.innerHTML = `
@@ -271,7 +427,7 @@ async function startDownload(url, title, format, resolution, popup, button) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        url: url,
+        url: downloadUrl,
         title: title,
         format_id: format.format_id,
         audio_format_id: format.audio_format_id,
@@ -304,16 +460,13 @@ async function startDownload(url, title, format, resolution, popup, button) {
   } catch (err) {
     button.innerHTML = origContent;
     button.classList.remove("leaf-format-loading");
-    
+
     popup.classList.add("leaf-popup-error-shake");
     setTimeout(() => popup.classList.remove("leaf-popup-error-shake"), 800);
   }
 }
 
-/**
- * Render error state in the popup
- */
-function renderError(popup) {
+function renderError(popup, url, isDirectFallback, videoSrcUrl) {
   const content = popup.querySelector(".leaf-popup-content");
   const headerInfo = popup.querySelector(".leaf-popup-video-info");
   if (headerInfo) headerInfo.remove();
@@ -328,7 +481,7 @@ function renderError(popup) {
         </svg>
       </div>
       <h3>Leaf App Offline</h3>
-      <p>Please open the Leaf Downloader desktop application on your computer and try again.</p>
+      <p>Please open the Leaf Downloader desktop application and try again.</p>
       <button class="leaf-retry-btn">Retry Connection</button>
     </div>
   `;
@@ -336,118 +489,229 @@ function renderError(popup) {
   const retryBtn = content.querySelector(".leaf-retry-btn");
   retryBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    popup.innerHTML = `
-      <div class="leaf-popup-header">
-        <div class="leaf-popup-brand-row">
-          <span class="leaf-popup-brand-title">Leaf Downloader</span>
-          <button class="leaf-popup-close-btn" aria-label="Close">&times;</button>
-        </div>
-        <div class="leaf-popup-video-info">
-          <div class="leaf-skeleton leaf-skeleton-thumb"></div>
-          <div class="leaf-popup-video-text">
-            <div class="leaf-skeleton leaf-skeleton-title"></div>
-            <div class="leaf-skeleton leaf-skeleton-uploader"></div>
-          </div>
-        </div>
-      </div>
-      <div class="leaf-popup-content">
-        <div class="leaf-skeleton-list">
-          <div class="leaf-skeleton leaf-skeleton-item"></div>
-          <div class="leaf-skeleton leaf-skeleton-item"></div>
-          <div class="leaf-skeleton leaf-skeleton-item"></div>
-        </div>
-      </div>
-    `;
-    const closeBtn = popup.querySelector(".leaf-popup-close-btn");
-    closeBtn.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      closePopup(popup);
-    });
-    fetchMetadata(window.location.href, popup);
+    popup.innerHTML = buildPopupSkeleton();
+    attachCloseBtn(popup);
+    fetchMetadata(url, popup, isDirectFallback, videoSrcUrl);
   });
 }
 
-/**
- * Inject the download button into YouTube's player controls
- */
-function injectButton() {
-  if (document.getElementById(BUTTON_ID)) return;
+// ---------------------------------------------------------------------------
+// Universal Hover Video Detector
+// ---------------------------------------------------------------------------
 
-  const rightControls = document.querySelector(".ytp-right-controls");
-  if (!rightControls) return;
+function createHoverBarFor(video) {
+  // Guard: already attached or too small
+  if (attachedVideos.has(video)) return;
+  if (video.offsetWidth < 120 || video.offsetHeight < 80) return;
+  if (video.dataset.leafDismissed === "true") return;
 
-  const btn = createDownloadButton();
-  rightControls.insertBefore(btn, rightControls.firstChild);
-}
+  // Mark as attached immediately to prevent races
+  attachedVideos.add(video);
 
-/**
- * Remove existing button and popup
- */
-function removeButton() {
-  const existing = document.getElementById(BUTTON_ID);
-  if (existing) existing.remove();
+  const bar = document.createElement("div");
+  bar.className = "leaf-video-hover-bar leaf-fade-in";
+  bar.dataset.leafBar = "1";
 
-  const popup = document.getElementById(POPUP_ID);
-  if (popup) popup.remove();
-}
+  bar.innerHTML = `
+    <div class="leaf-hover-bar-btn">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 5px; flex-shrink: 0;">
+        <path d="M12 3v12"/>
+        <path d="M8 11l4 4 4-4"/>
+        <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+      </svg>
+      <span>Download Video</span>
+    </div>
+    <div class="leaf-hover-bar-close" title="Dismiss">&times;</div>
+  `;
 
-/**
- * Check if current page is a video watch page
- */
-function isWatchPage() {
-  return window.location.hostname.includes("youtube.com") && 
-         (window.location.pathname === "/watch" || window.location.pathname.startsWith("/shorts/"));
-}
+  const dlBtn = bar.querySelector(".leaf-hover-bar-btn");
+  dlBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
 
-/**
- * Main injection logic — tries to inject
- */
-function tryInject() {
-  if (!isWatchPage()) {
-    removeButton();
-    return;
+    const existingPopup = document.getElementById(POPUP_ID);
+    if (existingPopup) {
+      closePopup(existingPopup);
+      return;
+    }
+
+    showVideoPopup(video);
+  });
+
+  const closeBtn = bar.querySelector(".leaf-hover-bar-close");
+  closeBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    video.dataset.leafDismissed = "true";
+    bar.remove();
+    // Allow re-attach if user navigates away and back
+    attachedVideos.delete(video);
+  });
+
+  const parent = video.parentElement;
+  if (parent) {
+    const computedStyle = window.getComputedStyle(parent);
+    if (computedStyle.position === "static") {
+      parent.style.position = "relative";
+    }
+    parent.appendChild(bar);
   }
 
-  injectButton();
+  // Remove the bar when the video element leaves the DOM
+  const removalObserver = new MutationObserver(() => {
+    if (!document.contains(video)) {
+      bar.remove();
+      attachedVideos.delete(video);
+      removalObserver.disconnect();
+    }
+  });
+  removalObserver.observe(document.body, { childList: true, subtree: true });
+}
 
-  if (!document.getElementById(BUTTON_ID)) {
-    const retryInterval = setInterval(() => {
-      if (document.getElementById(BUTTON_ID) || !isWatchPage()) {
-        clearInterval(retryInterval);
-        return;
+/**
+ * Show the format picker popup for any <video> element.
+ */
+function showVideoPopup(video) {
+  const { url, isDirectFallback } = resolveDownloadUrl(video);
+  // The actual video src (for dispatch) — may differ from url
+  const videoSrcUrl = getVideoSourceUrl(video);
+
+  const parent = video.parentElement;
+  if (!parent) return;
+
+  const popup = document.createElement("div");
+  popup.id = POPUP_ID;
+  popup.className = "leaf-popup-card leaf-fade-in";
+  popup.innerHTML = buildPopupSkeleton();
+  attachCloseBtn(popup);
+
+  parent.appendChild(popup);
+  popup.style.position = "absolute";
+  popup.style.top = "42px";
+  popup.style.right = "10px";
+  popup.style.zIndex = "100000";
+
+  // For direct links, the download URL is the video src; otherwise page URL (yt-dlp)
+  fetchMetadata(url, popup, isDirectFallback, videoSrcUrl);
+}
+
+function handleGlobalMouseOver(e) {
+  const videos = document.querySelectorAll("video");
+  const x = e.clientX;
+  const y = e.clientY;
+
+  for (const video of videos) {
+    if (attachedVideos.has(video)) continue;
+    if (video.dataset.leafDismissed === "true") continue;
+    if (video.offsetWidth < 120 || video.offsetHeight < 80) continue;
+
+    const rect = video.getBoundingClientRect();
+    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      createHoverBarFor(video);
+      break;
+    }
+  }
+}
+
+function removeHoverBars() {
+  document.querySelectorAll("[data-leaf-bar]").forEach(bar => bar.remove());
+}
+
+// ---------------------------------------------------------------------------
+// MutationObserver for dynamically loaded <video> elements
+// ---------------------------------------------------------------------------
+
+function onNewVideoElement(video) {
+  // Small delay to let the element finish loading its src attribute
+  setTimeout(() => {
+    const srcUrl = getVideoSourceUrl(video);
+    // Only auto-attach if it has a real src or is large enough to be meaningful
+    if (video.offsetWidth >= 120 || video.offsetHeight >= 80 || srcUrl) {
+      // Don't auto-inject bar — wait for hover. Just ensure clean state.
+      attachedVideos.delete(video);
+    }
+  }, 300);
+}
+
+const videoMutationObserver = new MutationObserver((mutations) => {
+  for (const mutation of mutations) {
+    for (const node of mutation.addedNodes) {
+      if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+      // Check if the added node itself is a video
+      if (node.tagName === "VIDEO") {
+        onNewVideoElement(node);
       }
-      injectButton();
-    }, 500);
 
-    setTimeout(() => clearInterval(retryInterval), 10000);
-  }
-}
-
-/**
- * Watch for controls container adjustments using light MutationObserver
- */
-function setupLightweightObserver() {
-  if (!window.location.hostname.includes("youtube.com")) return;
-
-  const target = document.querySelector(".ytp-right-controls");
-  if (target) {
-    const observer = new MutationObserver(() => {
-      if (isWatchPage() && !document.getElementById(BUTTON_ID)) {
-        injectButton();
+      // Check descendants
+      const videos = node.querySelectorAll ? node.querySelectorAll("video") : [];
+      for (const video of videos) {
+        onNewVideoElement(video);
       }
-    });
-    observer.observe(target, { childList: true });
-  } else {
-    setTimeout(setupLightweightObserver, 1000);
-  }
-}
+    }
 
-/**
- * SPA page URL polling listener (Safety net)
- */
+    // Also handle src changes on existing video elements
+    if (mutation.type === "attributes" &&
+        mutation.target.tagName === "VIDEO" &&
+        (mutation.attributeName === "src" || mutation.attributeName === "currentSrc")) {
+      const video = mutation.target;
+      // Reset dismissed state when video source changes
+      delete video.dataset.leafDismissed;
+      attachedVideos.delete(video);
+    }
+  }
+});
+
+videoMutationObserver.observe(document.body, {
+  childList: true,
+  subtree: true,
+  attributes: true,
+  attributeFilter: ["src", "currentSrc"]
+});
+
+// ---------------------------------------------------------------------------
+// Context Menu handler (message from background.js)
+// ---------------------------------------------------------------------------
+
+browser.runtime.onMessage.addListener((message) => {
+  if (message.type === "contextMenuDownload") {
+    const { linkUrl, srcUrl, pageUrl } = message;
+
+    // Pick the most specific URL available
+    const targetUrl = srcUrl || linkUrl || pageUrl;
+    if (!targetUrl) return;
+
+    // Build a simple popup attached to body
+    const existingPopup = document.getElementById(POPUP_ID);
+    if (existingPopup) closePopup(existingPopup);
+
+    const popup = document.createElement("div");
+    popup.id = POPUP_ID;
+    popup.className = "leaf-popup-card leaf-fade-in";
+    popup.innerHTML = buildPopupSkeleton();
+    attachCloseBtn(popup);
+
+    document.body.appendChild(popup);
+
+    // Float in top-right corner
+    popup.style.position = "fixed";
+    popup.style.top = "20px";
+    popup.style.right = "20px";
+    popup.style.zIndex = "2147483647";
+
+    // Determine if this is a direct media URL
+    const isDirectMedia = /\.(mp4|mkv|webm|mov|avi|flv|mp3|m4a|zip|exe|tar|gz|7z|ts|m3u8)(\?|#|$)/i.test(targetUrl);
+    fetchMetadata(targetUrl, popup, isDirectMedia, isDirectMedia ? targetUrl : null);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// SPA navigation polling
+// ---------------------------------------------------------------------------
+
 function handlePageChange() {
   removeButton();
-  removeHoverBar();
+  removeHoverBars();
   setTimeout(tryInject, 400);
   setTimeout(setupLightweightObserver, 600);
 }
@@ -459,190 +723,19 @@ setInterval(() => {
   }
 }, 500);
 
-
-/**
- * =========================================================================
- * UNIVERSAL HOVER VIDEO DETECTOR (Facebook, Instagram, Reddit, X, etc.)
- * =========================================================================
- */
-
-function isKnownPlatform() {
-  const host = window.location.hostname;
-  return host.includes("youtube.com") || 
-         host.includes("youtu.be") || 
-         host.includes("facebook.com") || 
-         host.includes("instagram.com") || 
-         host.includes("reddit.com") || 
-         host.includes("twitter.com") || 
-         host.includes("x.com");
-}
-
-function getVideoSourceUrl(video) {
-  if (video.src && !video.src.startsWith("blob:")) {
-    return video.src;
-  }
-  const sources = video.querySelectorAll("source");
-  for (const srcEl of sources) {
-    if (srcEl.src && !srcEl.src.startsWith("blob:")) {
-      return srcEl.src;
-    }
-  }
-  return null;
-}
-
-function handleGlobalMouseOver(e) {
-  const videos = document.querySelectorAll("video");
-  const x = e.clientX;
-  const y = e.clientY;
-  
-  let hoveredVideo = null;
-  for (const video of videos) {
-    if (video.offsetWidth < 120 || video.offsetHeight < 80) continue;
-    if (video.dataset.leafDismissed === "true") continue;
-
-    const rect = video.getBoundingClientRect();
-    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-      hoveredVideo = video;
-      break;
-    }
-  }
-
-  if (hoveredVideo) {
-    const parent = hoveredVideo.parentElement;
-    if (parent && !parent.querySelector("#" + HOVER_BAR_ID)) {
-      createHoverBarFor(hoveredVideo);
-    }
-  }
-}
-
-function createHoverBarFor(video) {
-  const bar = document.createElement("div");
-  bar.id = HOVER_BAR_ID;
-  bar.className = "leaf-video-hover-bar leaf-fade-in";
-  
-  bar.innerHTML = `
-    <div class="leaf-hover-bar-btn">
-      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 5px; flex-shrink: 0;">
-        <path d="M12 3v12"/>
-        <path d="M8 11l4 4 4-4"/>
-        <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
-      </svg>
-      <span>Download Video</span>
-    </div>
-    <div class="leaf-hover-bar-close" title="Dismiss panel">&times;</div>
-  `;
-  
-  const dlBtn = bar.querySelector(".leaf-hover-bar-btn");
-  dlBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const parent = video.parentElement;
-    if (!parent) return;
-    
-    const existingPopup = document.getElementById(POPUP_ID);
-    if (existingPopup) {
-      closePopup(existingPopup);
-      return;
-    }
-    
-    showUniversalPopup(parent, video);
-  });
-
-  const closeBtn = bar.querySelector(".leaf-hover-bar-close");
-  closeBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    video.dataset.leafDismissed = "true";
-    bar.remove();
-  });
-  
-  const parent = video.parentElement;
-  if (parent) {
-    const computedStyle = window.getComputedStyle(parent);
-    if (computedStyle.position === "static") {
-      parent.style.position = "relative";
-    }
-    parent.appendChild(bar);
-  }
-}
-
-function removeHoverBar() {
-  const bars = document.querySelectorAll("#" + HOVER_BAR_ID);
-  bars.forEach(bar => bar.remove());
-}
-
-/**
- * Show formats selection card overlapping any webpage's video parent element
- */
-function showUniversalPopup(parent, video) {
-  const popup = document.createElement("div");
-  popup.id = POPUP_ID;
-  popup.className = "leaf-popup-card leaf-fade-in";
-
-  popup.innerHTML = `
-    <div class="leaf-popup-header">
-      <div class="leaf-popup-brand-row">
-        <span class="leaf-popup-brand-title">Leaf Downloader</span>
-        <button class="leaf-popup-close-btn" aria-label="Close">&times;</button>
-      </div>
-      <div class="leaf-popup-video-info">
-        <div class="leaf-skeleton leaf-skeleton-thumb"></div>
-        <div class="leaf-popup-video-text">
-          <div class="leaf-skeleton leaf-skeleton-title"></div>
-          <div class="leaf-skeleton leaf-skeleton-uploader"></div>
-        </div>
-      </div>
-    </div>
-    <div class="leaf-popup-content">
-      <div class="leaf-skeleton-list">
-        <div class="leaf-skeleton leaf-skeleton-item"></div>
-        <div class="leaf-skeleton leaf-skeleton-item"></div>
-        <div class="leaf-skeleton leaf-skeleton-item"></div>
-      </div>
-    </div>
-  `;
-
-  const closeBtn = popup.querySelector(".leaf-popup-close-btn");
-  closeBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    closePopup(popup);
-  });
-
-  parent.appendChild(popup);
-
-  // Position popup absolute inside the relative container
-  popup.style.position = "absolute";
-  popup.style.top = "42px";
-  popup.style.right = "10px";
-  popup.style.zIndex = "100000";
-
-  let targetUrl = window.location.href;
-  let isDirectFallback = false;
-  if (!isKnownPlatform()) {
-    const srcUrl = getVideoSourceUrl(video);
-    if (srcUrl) {
-      targetUrl = srcUrl;
-      isDirectFallback = true;
-    }
-  }
-
-  fetchMetadata(targetUrl, popup, isDirectFallback);
-}
-
-// Global mouse listeners
-document.addEventListener("mouseover", handleGlobalMouseOver);
-
-// Global click outside popup cleanup
+// Click-outside popup cleanup
 document.addEventListener("click", (e) => {
   const popup = document.getElementById(POPUP_ID);
   const btn = document.getElementById(BUTTON_ID);
-  const hoverBtn = document.getElementById(HOVER_BAR_ID);
-  if (popup && !popup.contains(e.target) && (!btn || !btn.contains(e.target)) && (!hoverBtn || !hoverBtn.contains(e.target))) {
+  if (popup &&
+      !popup.contains(e.target) &&
+      (!btn || !btn.contains(e.target))) {
     closePopup(popup);
   }
 });
 
-// Initial injection triggers
+document.addEventListener("mouseover", handleGlobalMouseOver);
+
+// Initial injection
 tryInject();
 setupLightweightObserver();

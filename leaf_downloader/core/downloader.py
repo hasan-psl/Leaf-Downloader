@@ -258,7 +258,13 @@ class DownloadManager:
         return cls._instance
         
     def add_download(self, url, title, format_id, audio_format_id, dest_dir, ext='mp4', start_immediately=True, resolution=""):
-        task = DownloadTask(url, title, format_id, audio_format_id, dest_dir, ext, resolution)
+        # Route direct HTTP downloads to the native segmented engine,
+        # everything else (YouTube, etc.) goes through yt-dlp
+        if format_id == "direct":
+            from leaf_downloader.core.direct_downloader import DirectDownloadTask
+            task = DirectDownloadTask(url, title, dest_dir, ext, resolution)
+        else:
+            task = DownloadTask(url, title, format_id, audio_format_id, dest_dir, ext, resolution)
         
         if start_immediately:
             self.tasks.append(task)

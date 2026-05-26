@@ -164,65 +164,91 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "Invalid URL"})
             return
 
+        from urllib.parse import urlparse
+
+        # ---------- Fast-path: detect direct media URLs before calling yt-dlp ----------
+        DIRECT_EXTENSIONS = [
+            ".mp4", ".mkv", ".webm", ".mov", ".avi", ".flv",
+            ".mp3", ".m4a", ".m3u8", ".ts",
+            ".zip", ".exe", ".tar", ".gz", ".7z", ".iso", ".dmg",
+        ]
+
+        def _detect_direct(target_url):
+            """Return (is_direct, ext) for a URL that looks like a direct media/file link."""
+            parsed = urlparse(target_url)
+            path = parsed.path.lower()
+            for ext in DIRECT_EXTENSIONS:
+                # Match path ending or extension inside the path (before query string)
+                if path.endswith(ext) or ("/" + ext.lstrip(".") + "?") in path or path.endswith(ext.lstrip(".")):
+                    return True, ext.lstrip(".")
+            # Also check the raw extension at the end of the path segment
+            last_segment = path.rstrip("/").split("/")[-1]
+            if "." in last_segment:
+                file_ext = "." + last_segment.rsplit(".", 1)[-1].split("?")[0]
+                if file_ext in DIRECT_EXTENSIONS:
+                    return True, file_ext.lstrip(".")
+            return False, "mp4"
+
+        def _build_direct_metadata(target_url, ext, filename_hint=None):
+            """Build the metadata response for a direct file download."""
+            parsed = urlparse(target_url)
+            path = parsed.path
+            filename = filename_hint or path.split("/")[-1] or "download"
+            # Strip extension and query params from display name
+            if "." in filename:
+                filename = filename.rsplit(".", 1)[0]
+            filename = filename.split("?")[0].split("#")[0].strip()
+            if not filename:
+                filename = "Direct Download"
+            return {
+                "title": filename,
+                "thumbnail": "",
+                "uploader": "Direct Link",
+                "duration": 0,
+                "formats": [{
+                    "type": "Muxed",
+                    "format_id": "direct",
+                    "audio_format_id": None,
+                    "height": "Direct",
+                    "fps": None,
+                    "ext": ext,
+                    "vcodec": "unknown",
+                    "acodec": "unknown",
+                    "size": 0,
+                    "merged": False,
+                }],
+            }
+
+        # Check if this is obviously a direct file URL
+        is_direct, detected_ext = _detect_direct(url)
+
+        if is_direct:
+            # Skip yt-dlp entirely for direct file URLs
+            self._send_json(200, _build_direct_metadata(url, detected_ext))
+            return
+
+        if is_direct_fallback:
+            # Browser sent us this as an explicit direct fallback (e.g. blob: video src)
+            self._send_json(200, _build_direct_metadata(url, "mp4"))
+            return
+
+        # ---------- yt-dlp path for platform URLs (YouTube, etc.) ----------
         import subprocess
         try:
             cmd = ["yt-dlp", "--dump-json", "--no-playlist", url]
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             stdout, stderr = process.communicate()
-            
+
             if process.returncode != 0:
-                # Check if it is a direct media or live link
-                is_direct = False
-                ext = "mp4"
-                
-                from urllib.parse import urlparse
-                parsed_url = urlparse(url)
-                path = parsed_url.path.lower()
-                full_url_lower = url.lower()
-                
-                direct_extensions = [".mp4", ".mkv", ".webm", ".mov", ".avi", ".flv", ".mp3", ".m4a", ".m3u8", ".ts"]
-                for de in direct_extensions:
-                    if path.endswith(de) or de in path or de in full_url_lower:
-                        is_direct = True
-                        ext = de.lstrip(".")
-                        break
-                
-                if not is_direct and is_direct_fallback:
-                    is_direct = True
-                    ext = "mp4"
-                
-                if is_direct:
-                    filename = path.split("/")[-1] or "direct_video"
-                    if "." in filename:
-                        filename = filename.rsplit(".", 1)[0]
-                    filename = filename.split("?")[0].split("#")[0]
-                    if not filename:
-                        filename = "Direct Video Link"
-                        
-                    custom_metadata = {
-                        "title": filename,
-                        "thumbnail": "",
-                        "uploader": "Direct Link",
-                        "duration": 0,
-                        "formats": [{
-                            "type": "Muxed",
-                            "format_id": "direct",
-                            "audio_format_id": None,
-                            "height": "Direct",
-                            "fps": None,
-                            "ext": ext,
-                            "vcodec": "unknown",
-                            "acodec": "unknown",
-                            "size": 0,
-                            "merged": False
-                        }]
-                    }
-                    self._send_json(200, custom_metadata)
-                    return
+                # yt-dlp failed — last resort: check if it looks direct anyway
+                is_direct_retry, ext_retry = _detect_direct(url)
+                if is_direct_retry:
+                    self._send_json(200, _build_direct_metadata(url, ext_retry))
                 else:
                     self._send_json(500, {"error": stderr.strip() or "Failed to run yt-dlp"})
-                    return
-                
+                return
+
+
             metadata = json.loads(stdout)
             
             # Extract fields
