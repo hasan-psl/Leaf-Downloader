@@ -631,7 +631,7 @@
   position: absolute;
   top: 10px;
   right: 10px;
-  z-index: 99999;
+  z-index: 2147483647;
   background: rgba(20, 20, 22, 0.300);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -651,6 +651,13 @@
   transition: opacity 1s cubic-bezier(0.25, 1, 0.5, 1), background 0.2s ease, border-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
   pointer-events: auto;
   overflow: hidden;
+  cursor: grab;
+}
+
+.leaf-video-hover-bar.leaf-grabbing {
+  cursor: grabbing !important;
+  opacity: 1 !important;
+  transition: none !important;
 }
 
 .leaf-video-hover-bar:hover {

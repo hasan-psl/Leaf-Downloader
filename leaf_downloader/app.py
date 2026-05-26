@@ -6,6 +6,7 @@ from leaf_downloader.core.clipboard_monitor import ClipboardMonitor
 from leaf_downloader.core.api_server import ApiServer
 from leaf_downloader.core.config import ConfigManager
 from leaf_downloader.ui.new_download_dialog import NewDownloadDialog
+from leaf_downloader.ui.download_confirm_dialog import DownloadConfirmDialog
 
 class LeafDownloaderApp(Adw.Application):
     def __init__(self):
@@ -101,10 +102,12 @@ class LeafDownloaderApp(Adw.Application):
             pass
 
         if is_direct:
-            # Start download immediately in background without opening main window!
-            from leaf_downloader.core.downloader import DownloadManager
-            from leaf_downloader.core.config import ConfigManager
-            import os
+            # Open Save-As confirmation dialog!
+            win = self.props.active_window
+            if not win:
+                win = LeafDownloaderWindow(application=self)
+            
+            win.present()
             
             url = data.get("url")
             title = data.get("title", "Unknown Title")
@@ -113,19 +116,17 @@ class LeafDownloaderApp(Adw.Application):
             ext = data.get("ext", "mp4")
             resolution = data.get("resolution", "")
             
-            default_dir = ConfigManager().get_setting("download_dir", os.path.expanduser("~/Downloads/Leaf"))
-            
-            DownloadManager().add_download(
+            dialog = DownloadConfirmDialog(
+                parent_window=win,
                 url=url,
                 title=title,
                 format_id=format_id,
                 audio_format_id=audio_format_id,
-                dest_dir=default_dir,
                 ext=ext,
-                start_immediately=True,
                 resolution=resolution
             )
-            print(f"[Browser Extension] Direct download started for: {title} ({resolution})")
+            dialog.present(win)
+            print(f"[Browser Extension] Open DownloadConfirmDialog for: {title} ({resolution})")
         else:
             # Fallback to legacy behavior: bring the main window to front and open metadata dialog
             win = self.props.active_window

@@ -9,20 +9,30 @@ const statusText = document.getElementById("statusText");
 const sendBtn = document.getElementById("sendUrlBtn");
 const feedback = document.getElementById("feedback");
 
+async function callApi(endpoint, method, body) {
+  try {
+    const response = await browser.runtime.sendMessage({
+      type: "fetchApi",
+      endpoint,
+      method,
+      body
+    });
+    if (!response.ok) {
+      throw new Error(response.error || `HTTP ${response.status}`);
+    }
+    return response.data;
+  } catch (err) {
+    throw err;
+  }
+}
+
 /**
  * Check app status and update UI
  */
 async function checkStatus() {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-
-    const res = await fetch(`${API_BASE}/api/ping`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-
-    if (res.ok) {
+    const data = await callApi("/api/ping", "GET");
+    if (data && data.status === "running") {
       setStatus(true);
     } else {
       setStatus(false);
@@ -64,21 +74,10 @@ sendBtn.addEventListener("click", async () => {
     }
 
     const url = tabs[0].url;
-
-    const res = await fetch(`${API_BASE}/api/download`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
-    });
-
-    if (res.ok) {
-      showFeedback("✓ Sent to Leaf!", "success");
-    } else {
-      const data = await res.json().catch(() => ({}));
-      showFeedback(data.error || "Request failed", "error");
-    }
+    await callApi("/api/download", "POST", { url });
+    showFeedback("✓ Sent to Leaf!", "success");
   } catch (err) {
-    showFeedback("Cannot reach Leaf app", "error");
+    showFeedback(err.message || "Cannot reach Leaf app", "error");
   } finally {
     setTimeout(() => {
       sendBtn.disabled = false;

@@ -29,11 +29,15 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
 
     def _send_json(self, status_code, data):
         """Send a JSON response."""
-        self.send_response(status_code)
-        self.send_header("Content-Type", "application/json")
-        self._set_cors_headers()
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode("utf-8"))
+        try:
+            self.send_response(status_code)
+            self.send_header("Content-Type", "application/json")
+            self._set_cors_headers()
+            self.end_headers()
+            self.wfile.write(json.dumps(data).encode("utf-8"))
+        except (BrokenPipeError, ConnectionResetError):
+            # Client disconnected before we could respond (e.g. fast ping check).
+            pass
 
     def do_OPTIONS(self):
         """Handle CORS preflight requests."""
@@ -227,11 +231,6 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, _build_direct_metadata(url, detected_ext))
             return
 
-        if is_direct_fallback:
-            # Browser sent us this as an explicit direct fallback (e.g. blob: video src)
-            self._send_json(200, _build_direct_metadata(url, "mp4"))
-            return
-
         # ---------- yt-dlp path for platform URLs (YouTube, etc.) ----------
         import subprocess
         try:
@@ -244,6 +243,9 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 is_direct_retry, ext_retry = _detect_direct(url)
                 if is_direct_retry:
                     self._send_json(200, _build_direct_metadata(url, ext_retry))
+                elif is_direct_fallback:
+                    # Browser sent us this as a direct fallback, and yt-dlp failed
+                    self._send_json(200, _build_direct_metadata(url, "mp4"))
                 else:
                     self._send_json(500, {"error": stderr.strip() or "Failed to run yt-dlp"})
                 return

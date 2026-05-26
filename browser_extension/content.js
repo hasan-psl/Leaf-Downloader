@@ -21,6 +21,23 @@ let lastUrl = window.location.href;
 // Tracks which <video> elements already have a hover bar attached
 const attachedVideos = new WeakSet();
 
+async function callApi(endpoint, method, body) {
+  try {
+    const response = await browser.runtime.sendMessage({
+      type: "fetchApi",
+      endpoint,
+      method,
+      body
+    });
+    if (!response.ok) {
+      throw new Error(response.error || `HTTP ${response.status}`);
+    }
+    return response.data;
+  } catch (err) {
+    throw err;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
@@ -38,6 +55,145 @@ function formatBytes(bytes) {
 function isYouTube() {
   const host = window.location.hostname;
   return host.includes("youtube.com") || host.includes("youtu.be");
+}
+
+function isSocialPlatformSupportedByYtdlp() {
+  const host = window.location.hostname;
+  return (
+    host.includes("youtube.com") ||
+    host.includes("youtu.be") ||
+    host.includes("instagram.com") ||
+    host.includes("facebook.com") ||
+    host.includes("twitter.com") ||
+    host.includes("x.com") ||
+    host.includes("tiktok.com") ||
+    host.includes("reddit.com") ||
+    host.includes("dailymotion.com") ||
+    host.includes("vimeo.com")
+  );
+}
+
+function getSocialPlatformPostUrl(video) {
+  const host = window.location.hostname;
+  
+  if (host.includes("instagram.com")) {
+    const article = video.closest("article");
+    if (article) {
+      const links = Array.from(article.querySelectorAll("a"));
+      for (const link of links) {
+        const href = link.getAttribute("href");
+        if (href && (href.includes("/p/") || href.includes("/reel/") || href.includes("/reels/") || href.includes("/tv/"))) {
+          return new URL(href, window.location.origin).href;
+        }
+      }
+    }
+    let parent = video.parentElement;
+    let depth = 0;
+    while (parent && depth < 10) {
+      const links = Array.from(parent.querySelectorAll("a"));
+      for (const link of links) {
+        const href = link.getAttribute("href");
+        if (href && (href.includes("/p/") || href.includes("/reel/") || href.includes("/reels/") || href.includes("/tv/"))) {
+          return new URL(href, window.location.origin).href;
+        }
+      }
+      parent = parent.parentElement;
+      depth++;
+    }
+  }
+
+  if (host.includes("facebook.com")) {
+    let parent = video.parentElement;
+    let depth = 0;
+    while (parent && depth < 10) {
+      const links = Array.from(parent.querySelectorAll("a"));
+      for (const link of links) {
+        const href = link.getAttribute("href");
+        if (href && (href.includes("/watch/") || href.includes("/videos/") || href.includes("/reel/") || href.includes("/reels/"))) {
+          return new URL(href, window.location.origin).href;
+        }
+      }
+      parent = parent.parentElement;
+      depth++;
+    }
+  }
+
+  if (host.includes("twitter.com") || host.includes("x.com")) {
+    const article = video.closest("article");
+    if (article) {
+      const links = Array.from(article.querySelectorAll("a"));
+      for (const link of links) {
+        const href = link.getAttribute("href");
+        if (href && href.includes("/status/")) {
+          return new URL(href, window.location.origin).href;
+        }
+      }
+    }
+    let parent = video.parentElement;
+    let depth = 0;
+    while (parent && depth < 10) {
+      const links = Array.from(parent.querySelectorAll("a"));
+      for (const link of links) {
+        const href = link.getAttribute("href");
+        if (href && href.includes("/status/")) {
+          return new URL(href, window.location.origin).href;
+        }
+      }
+      parent = parent.parentElement;
+      depth++;
+    }
+  }
+
+  if (host.includes("tiktok.com")) {
+    let parent = video.parentElement;
+    let depth = 0;
+    while (parent && depth < 10) {
+      const links = Array.from(parent.querySelectorAll("a"));
+      for (const link of links) {
+        const href = link.getAttribute("href");
+        if (href && href.includes("/video/")) {
+          return new URL(href, window.location.origin).href;
+        }
+      }
+      parent = parent.parentElement;
+      depth++;
+    }
+  }
+
+  if (host.includes("dailymotion.com")) {
+    let parent = video.parentElement;
+    let depth = 0;
+    while (parent && depth < 10) {
+      const links = Array.from(parent.querySelectorAll("a"));
+      for (const link of links) {
+        const href = link.getAttribute("href");
+        if (href && href.includes("/video/")) {
+          return new URL(href, window.location.origin).href;
+        }
+      }
+      parent = parent.parentElement;
+      depth++;
+    }
+  }
+
+  if (host.includes("vimeo.com")) {
+    let parent = video.parentElement;
+    let depth = 0;
+    while (parent && depth < 10) {
+      const links = Array.from(parent.querySelectorAll("a"));
+      for (const link of links) {
+        const href = link.getAttribute("href");
+        const path = new URL(href, window.location.origin).pathname;
+        if (href && /^\/\d+$/.test(path)) {
+          return new URL(href, window.location.origin).href;
+        }
+      }
+      parent = parent.parentElement;
+      depth++;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -68,25 +224,143 @@ function getVideoSourceUrl(video) {
 /**
  * Decide the best URL to send for a given video element.
  *
- * - For YouTube:  always send window.location.href → yt-dlp handles it
- * - For everything else: prefer the direct video src URL. If no direct src
- *   is found (blob: only), fall back to page URL with is_direct_fallback=true
- *   so the API server probes it generically.
+ * - For YouTube/Instagram/FB/X/TikTok: send specific post/reel permalink so yt-dlp extracts real video streams.
+ * - For direct/standard sites: send direct video src URL.
+ * - Otherwise: fallback to page URL as direct fallback.
  *
  * Returns { url, isDirectFallback }
  */
-function resolveDownloadUrl(video) {
+/**
+ * Converts embedded player URLs (from iframes) into their corresponding standard watch URLs.
+ * This guarantees maximal compatibility with yt-dlp.
+ */
+function convertEmbedToWatchUrl(urlStr) {
+  try {
+    const url = new URL(urlStr);
+    const host = url.hostname;
+    const path = url.pathname;
+
+    // 1. If we are running inside an iframe, check document.referrer.
+    // If the host page URL is a standard platform watch page, we can use it directly!
+    if (window !== window.top && document.referrer) {
+      try {
+        const refUrl = new URL(document.referrer);
+        const refHost = refUrl.hostname;
+        
+        if (host.includes("dailymotion.com") && refHost.includes("dailymotion.com") && refUrl.pathname.includes("/video/")) {
+          return refUrl.href;
+        }
+        if (host.includes("vimeo.com") && refHost.includes("vimeo.com") && /^\/\d+$/.test(refUrl.pathname)) {
+          return refUrl.href;
+        }
+        if ((host.includes("youtube.com") || host.includes("youtu.be")) && 
+            (refHost.includes("youtube.com") || refHost.includes("youtu.be")) && 
+            refUrl.pathname.includes("/watch")) {
+          return refUrl.href;
+        }
+      } catch (e) {
+        // Ignore referrer parsing errors
+      }
+    }
+
+    // 2. Query parameter or path-based embed parsers
+    // Dailymotion embed or geo player
+    if (host.includes("dailymotion.com")) {
+      const videoParam = url.searchParams.get("video");
+      if (videoParam) {
+        return `https://www.dailymotion.com/video/${videoParam}`;
+      }
+      const match = path.match(/\/embed\/video\/([a-zA-Z0-9]+)/);
+      if (match) {
+        return `https://www.dailymotion.com/video/${match[1]}`;
+      }
+    }
+
+    // Vimeo embed
+    if (host.includes("vimeo.com")) {
+      const match = path.match(/\/video\/([0-9]+)/);
+      if (match) {
+        return `https://vimeo.com/${match[1]}`;
+      }
+    }
+
+    // YouTube embed
+    if (host.includes("youtube.com") || host.includes("youtu.be")) {
+      const match = path.match(/\/embed\/([a-zA-Z0-9_-]+)/);
+      if (match) {
+        return `https://www.youtube.com/watch?v=${match[1]}`;
+      }
+    }
+
+    // Facebook video plugin embeds
+    if (host.includes("facebook.com")) {
+      const hrefParam = url.searchParams.get("href");
+      if (hrefParam) {
+        return hrefParam;
+      }
+    }
+  } catch (e) {
+    // Ignore URL parsing errors
+  }
+  return urlStr;
+}
+
+/**
+ * Decide the best URL to send for a given video element.
+ *
+ * - For YouTube/Instagram/FB/X/TikTok/Dailymotion/Vimeo: send specific watch/post permalink so yt-dlp extracts real video streams.
+ * - For direct/standard sites: send direct video src URL.
+ * - Otherwise: fallback to page URL as direct fallback.
+ *
+ * When running inside an iframe, asks the background script for the real
+ * top-level tab URL via sender.tab.url — this is essential for sites like
+ * Dailymotion where the <video> lives inside a cross-origin iframe
+ * (e.g. geo.dailymotion.com) and document.referrer is empty.
+ *
+ * Returns { url, isDirectFallback }
+ */
+async function resolveDownloadUrl(video) {
+  let url = window.location.href;
+
+  // If we are inside an iframe, get the real top-level page URL from the
+  // background script. This is the same URL that "Send Current Tab" uses,
+  // and yt-dlp already works on it.
+  if (window !== window.top) {
+    try {
+      const resp = await browser.runtime.sendMessage({ type: "getTabUrl" });
+      if (resp && resp.url) {
+        url = resp.url;
+      }
+    } catch (e) {
+      // Messaging failed — fall back to iframe URL
+    }
+  }
+
   if (isYouTube()) {
-    return { url: window.location.href, isDirectFallback: false };
+    // YouTube: use the page/tab URL directly
+  } else if (isSocialPlatformSupportedByYtdlp()) {
+    const postUrl = getSocialPlatformPostUrl(video);
+    if (postUrl) {
+      url = postUrl;
+    }
+  } else {
+    const srcUrl = getVideoSourceUrl(video);
+    if (srcUrl) {
+      return { url: srcUrl, isDirectFallback: false };
+    }
   }
 
-  const srcUrl = getVideoSourceUrl(video);
-  if (srcUrl) {
-    return { url: srcUrl, isDirectFallback: false };
-  }
+  // Convert embed player URLs to standard watch URLs for maximum yt-dlp compatibility
+  url = convertEmbedToWatchUrl(url);
 
-  // No direct src (blob: or nothing) — send page URL, tell server it's a fallback
-  return { url: window.location.href, isDirectFallback: true };
+  // If it's a social/media platform supported by yt-dlp, always use isDirectFallback = false
+  // We check both the iframe host and the resolved URL host
+  const resolvedHost = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
+  const isKnownPlatform = isYouTube() || isSocialPlatformSupportedByYtdlp() ||
+    resolvedHost.includes("dailymotion.com") || resolvedHost.includes("vimeo.com") ||
+    resolvedHost.includes("youtube.com") || resolvedHost.includes("twitch.tv");
+
+  return { url: url, isDirectFallback: !isKnownPlatform };
 }
 
 // ---------------------------------------------------------------------------
@@ -264,17 +538,7 @@ function setupLightweightObserver() {
  */
 async function fetchMetadata(url, popup, isDirectFallback, videoSrcUrl) {
   try {
-    const response = await fetch(`${API_BASE}/api/metadata`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, is_direct_fallback: isDirectFallback })
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
+    const data = await callApi("/api/metadata", "POST", { url, is_direct_fallback: isDirectFallback });
     if (data.error) {
       throw new Error(data.error);
     }
@@ -286,7 +550,7 @@ async function fetchMetadata(url, popup, isDirectFallback, videoSrcUrl) {
     renderMetadata(data, popup, downloadUrl);
   } catch (err) {
     console.warn("[Leaf] Metadata fetch failed:", err.message);
-    renderError(popup, url, isDirectFallback, videoSrcUrl);
+    renderError(popup, url, isDirectFallback, videoSrcUrl, err.message);
   }
 }
 
@@ -423,22 +687,14 @@ async function startDownload(downloadUrl, title, format, resolution, popup, butt
   `;
 
   try {
-    const response = await fetch(`${API_BASE}/api/download`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: downloadUrl,
-        title: title,
-        format_id: format.format_id,
-        audio_format_id: format.audio_format_id,
-        ext: format.ext,
-        resolution: resolution
-      })
+    await callApi("/api/download", "POST", {
+      url: downloadUrl,
+      title: title,
+      format_id: format.format_id,
+      audio_format_id: format.audio_format_id,
+      ext: format.ext,
+      resolution: resolution
     });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
 
     popup.innerHTML = `
       <div class="leaf-popup-success-container">
@@ -451,7 +707,7 @@ async function startDownload(downloadUrl, title, format, resolution, popup, butt
           </div>
         </div>
         <h3>Sent to Leaf!</h3>
-        <p>Download started in the background</p>
+        <p>Please confirm download in the Leaf app</p>
       </div>
     `;
 
@@ -466,10 +722,23 @@ async function startDownload(downloadUrl, title, format, resolution, popup, butt
   }
 }
 
-function renderError(popup, url, isDirectFallback, videoSrcUrl) {
+function renderError(popup, url, isDirectFallback, videoSrcUrl, errorMsg) {
   const content = popup.querySelector(".leaf-popup-content");
   const headerInfo = popup.querySelector(".leaf-popup-video-info");
   if (headerInfo) headerInfo.remove();
+
+  // Determine if this is a connection/offline error or a specific extraction error
+  const isOffline = !errorMsg || 
+                    errorMsg.includes("Failed to fetch") || 
+                    errorMsg.includes("NetworkError") || 
+                    errorMsg.includes("Could not establish connection") || 
+                    errorMsg.includes("HTTP 502") ||
+                    errorMsg.includes("HTTP 504");
+
+  const title = isOffline ? "Leaf App Offline" : "Extraction Failed";
+  const desc = isOffline 
+    ? "Please open the Leaf Downloader desktop application and try again." 
+    : (errorMsg || "Unable to extract playable video streams from this page.");
 
   content.innerHTML = `
     <div class="leaf-error-container">
@@ -480,9 +749,9 @@ function renderError(popup, url, isDirectFallback, videoSrcUrl) {
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
       </div>
-      <h3>Leaf App Offline</h3>
-      <p>Please open the Leaf Downloader desktop application and try again.</p>
-      <button class="leaf-retry-btn">Retry Connection</button>
+      <h3>${title}</h3>
+      <p style="margin-top: 8px; color: #888; font-size: 13px; line-height: 1.4; padding: 0 15px; word-break: break-word;">${desc}</p>
+      <button class="leaf-retry-btn" style="margin-top: 15px;">Retry Connection</button>
     </div>
   `;
 
@@ -499,6 +768,59 @@ function renderError(popup, url, isDirectFallback, videoSrcUrl) {
 // Universal Hover Video Detector
 // ---------------------------------------------------------------------------
 
+function repositionBar(bar) {
+  const video = bar.leafVideo;
+  if (!video || !document.contains(video)) {
+    bar.remove();
+    return;
+  }
+
+  if (video.dataset.leafDraggedX && video.dataset.leafDraggedY) {
+    bar.style.left = `${video.dataset.leafDraggedX}px`;
+    bar.style.top = `${video.dataset.leafDraggedY}px`;
+    bar.style.right = "auto";
+    return;
+  }
+
+  const rect = video.getBoundingClientRect();
+  const top = rect.top + window.scrollY;
+  const left = rect.left + window.scrollX;
+
+  const barTop = top + 10;
+  const barWidth = bar.offsetWidth || 140;
+  const barLeft = left + rect.width - barWidth - 10;
+
+  bar.style.top = `${barTop}px`;
+  bar.style.left = `${barLeft}px`;
+  bar.style.right = "auto";
+}
+
+function repositionPopup(popup, bar) {
+  const barRect = bar.getBoundingClientRect();
+  const barTop = barRect.top + window.scrollY;
+  const barLeft = barRect.left + window.scrollX;
+
+  popup.style.top = `${barTop + barRect.height + 6}px`;
+  popup.style.left = `${barLeft + barRect.width - 330}px`;
+}
+
+function repositionAllHoverBars() {
+  const bars = document.querySelectorAll("[data-leaf-bar]");
+  bars.forEach(bar => {
+    repositionBar(bar);
+  });
+
+  const popup = document.getElementById(POPUP_ID);
+  if (popup && popup.dataset.leafAssocBarId) {
+    const associatedBar = document.querySelector(`[data-leaf-bar-id="${popup.dataset.leafAssocBarId}"]`);
+    if (associatedBar) {
+      repositionPopup(popup, associatedBar);
+    } else {
+      closePopup(popup);
+    }
+  }
+}
+
 function createHoverBarFor(video) {
   // Guard: already attached or too small
   if (attachedVideos.has(video)) return;
@@ -511,6 +833,10 @@ function createHoverBarFor(video) {
   const bar = document.createElement("div");
   bar.className = "leaf-video-hover-bar leaf-fade-in";
   bar.dataset.leafBar = "1";
+  
+  const barId = "leaf-bar-" + Math.random().toString(36).substr(2, 9);
+  bar.dataset.leafBarId = barId;
+  bar.leafVideo = video;
 
   bar.innerHTML = `
     <div class="leaf-hover-bar-btn">
@@ -524,18 +850,98 @@ function createHoverBarFor(video) {
     <div class="leaf-hover-bar-close" title="Dismiss">&times;</div>
   `;
 
+  // Drag-and-drop state variables
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+  let initialBarX = 0;
+  let initialBarY = 0;
+  const dragThreshold = 5; // px
+  let dragDetected = false;
+
+  function onMouseMove(e) {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+
+    if (!dragDetected && (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold)) {
+      dragDetected = true;
+      bar.classList.add("leaf-grabbing");
+    }
+
+    if (dragDetected) {
+      const newX = initialBarX + dx;
+      const newY = initialBarY + dy;
+
+      bar.style.left = `${newX}px`;
+      bar.style.top = `${newY}px`;
+      bar.style.right = "auto";
+
+      video.dataset.leafDraggedX = newX;
+      video.dataset.leafDraggedY = newY;
+
+      // Real-time update of any open popup attached to this bar
+      const popup = document.getElementById(POPUP_ID);
+      if (popup && popup.dataset.leafAssocBarId === bar.dataset.leafBarId) {
+        popup.style.top = `${newY + bar.offsetHeight + 6}px`;
+        popup.style.left = `${newX + bar.offsetWidth - 330}px`;
+      }
+    }
+  }
+
+  function onMouseUp(e) {
+    if (!isDragging) return;
+    isDragging = false;
+    bar.classList.remove("leaf-grabbing");
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+
+    if (dragDetected) {
+      // Mark as just dragged to prevent click handler trigger
+      bar.dataset.leafJustDragged = "true";
+      setTimeout(() => {
+        delete bar.dataset.leafJustDragged;
+      }, 50);
+    }
+  }
+
+  bar.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return; // Left click only
+    if (e.target.closest(".leaf-hover-bar-close")) return;
+
+    isDragging = true;
+    dragDetected = false;
+    startX = e.clientX;
+    startY = e.clientY;
+
+    const rect = bar.getBoundingClientRect();
+    initialBarX = rect.left + window.scrollX;
+    initialBarY = rect.top + window.scrollY;
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+
+    // Prevent text selection
+    e.preventDefault();
+  });
+
   const dlBtn = bar.querySelector(".leaf-hover-bar-btn");
   dlBtn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
 
-    const existingPopup = document.getElementById(POPUP_ID);
-    if (existingPopup) {
-      closePopup(existingPopup);
+    if (bar.dataset.leafJustDragged === "true") {
       return;
     }
 
-    showVideoPopup(video);
+    const existingPopup = document.getElementById(POPUP_ID);
+    if (existingPopup) {
+      const isSame = existingPopup.dataset.leafAssocBarId === barId;
+      closePopup(existingPopup);
+      if (isSame) return; // Toggle off
+    }
+
+    showVideoPopup(video, bar);
   });
 
   const closeBtn = bar.querySelector(".leaf-hover-bar-close");
@@ -548,14 +954,8 @@ function createHoverBarFor(video) {
     attachedVideos.delete(video);
   });
 
-  const parent = video.parentElement;
-  if (parent) {
-    const computedStyle = window.getComputedStyle(parent);
-    if (computedStyle.position === "static") {
-      parent.style.position = "relative";
-    }
-    parent.appendChild(bar);
-  }
+  document.body.appendChild(bar);
+  repositionBar(bar);
 
   // Remove the bar when the video element leaves the DOM
   const removalObserver = new MutationObserver(() => {
@@ -571,13 +971,11 @@ function createHoverBarFor(video) {
 /**
  * Show the format picker popup for any <video> element.
  */
-function showVideoPopup(video) {
-  const { url, isDirectFallback } = resolveDownloadUrl(video);
-  // The actual video src (for dispatch) — may differ from url
+async function showVideoPopup(video, bar) {
   const videoSrcUrl = getVideoSourceUrl(video);
 
-  const parent = video.parentElement;
-  if (!parent) return;
+  const existingPopup = document.getElementById(POPUP_ID);
+  if (existingPopup) closePopup(existingPopup);
 
   const popup = document.createElement("div");
   popup.id = POPUP_ID;
@@ -585,11 +983,15 @@ function showVideoPopup(video) {
   popup.innerHTML = buildPopupSkeleton();
   attachCloseBtn(popup);
 
-  parent.appendChild(popup);
+  document.body.appendChild(popup);
   popup.style.position = "absolute";
-  popup.style.top = "42px";
-  popup.style.right = "10px";
-  popup.style.zIndex = "100000";
+  popup.style.zIndex = "2147483647";
+  popup.dataset.leafAssocBarId = bar.dataset.leafBarId;
+
+  repositionPopup(popup, bar);
+
+  // Resolve the download URL (may be async when inside an iframe)
+  const { url, isDirectFallback } = await resolveDownloadUrl(video);
 
   // For direct links, the download URL is the video src; otherwise page URL (yt-dlp)
   fetchMetadata(url, popup, isDirectFallback, videoSrcUrl);
@@ -615,6 +1017,8 @@ function handleGlobalMouseOver(e) {
 
 function removeHoverBars() {
   document.querySelectorAll("[data-leaf-bar]").forEach(bar => bar.remove());
+  const popup = document.getElementById(POPUP_ID);
+  if (popup) closePopup(popup);
 }
 
 // ---------------------------------------------------------------------------
@@ -735,6 +1139,13 @@ document.addEventListener("click", (e) => {
 });
 
 document.addEventListener("mouseover", handleGlobalMouseOver);
+
+// Update coordinates on layout/viewport events
+window.addEventListener("scroll", repositionAllHoverBars, { passive: true });
+window.addEventListener("resize", repositionAllHoverBars, { passive: true });
+
+// Align layout shifts and newly added elements periodically
+setInterval(repositionAllHoverBars, 150);
 
 // Initial injection
 tryInject();

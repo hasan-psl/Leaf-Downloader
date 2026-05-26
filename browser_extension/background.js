@@ -57,6 +57,14 @@ function updateBadge(online) {
 checkAppStatus();
 setInterval(checkAppStatus, POLL_INTERVAL);
 
+// Register alarms to wake up the background script and check status periodically
+browser.alarms.create("checkAppStatusAlarm", { periodInMinutes: 1 });
+browser.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "checkAppStatusAlarm") {
+    checkAppStatus();
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Context menus
 // ---------------------------------------------------------------------------
@@ -111,5 +119,68 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "getStatus") {
     sendResponse({ running: isAppRunning });
+    return false;
+  }
+
+  // Return the top-level tab URL to content scripts running inside iframes.
+  // This is essential for sites like Dailymotion/Vimeo where the <video> lives
+  // inside a cross-origin iframe (e.g. geo.dailymotion.com) and the content
+  // script cannot access the parent page URL via document.referrer or window.top.
+  if (message.type === "getTabUrl") {
+    sendResponse({ url: sender.tab?.url || null });
+    return false;
+  }
+
+  if (message.type === "fetchApi") {
+    const { endpoint, method, body } = message;
+    const url = `${API_BASE}${endpoint}`;
+
+    const options = {
+      method: method || "GET",
+      headers: {
+        "Content-Type": "application/json"
+      }
+    };
+
+    if (body) {
+      options.body = JSON.stringify(body);
+    }
+
+    fetch(url, options)
+      .then(async (response) => {
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = text;
+        }
+
+        // Successfully reached backend app, update app running state to true
+        if (!isAppRunning) {
+          isAppRunning = true;
+          updateBadge(true);
+        }
+
+        sendResponse({
+          ok: response.ok,
+          status: response.status,
+          data: data
+        });
+      })
+      .catch((err) => {
+        // Failed to reach backend app, update app running state to false
+        if (isAppRunning) {
+          isAppRunning = false;
+          updateBadge(false);
+        }
+
+        sendResponse({
+          ok: false,
+          error: err.message
+        });
+      });
+
+    return true; // Keep response channel open for async sendResponse
   }
 });
