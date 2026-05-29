@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Leaf Downloader
+GenericName=Download Manager
+Comment=Modern download manager for Linux with yt-dlp and segmented download engine
+Icon=io.github.hasan_psl.LeafDownloader
+Exec=leaf-downloader %u
+Terminal=false
+Categories=Network;FileTransfer;GTK;GNOME;
+Keywords=download;video;youtube;media;yt-dlp;manager;
+StartupNotify=true
+StartupWMClass=io.github.hasan_psl.LeafDownloader
+MimeType=x-scheme-handler/http;x-scheme-handler/https;

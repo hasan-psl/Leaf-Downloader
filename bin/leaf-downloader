@@ -1,0 +1,33 @@
+#!/bin/bash
+# Leaf Downloader launcher script
+# This script sets up the Python path and launches the application.
+
+# Determine the application's installation prefix
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# For Flatpak: modules are in /app/lib/pythonX.Y/site-packages
+# For system installs: modules are relative to the script
+if [ -d "/app/share/leaf-downloader" ]; then
+    # Running inside Flatpak sandbox
+    export PYTHONPATH="/app/share/leaf-downloader${PYTHONPATH:+:$PYTHONPATH}"
+    exec python3 /app/share/leaf-downloader/main.py "$@"
+else
+    # Running from system install or development
+    PREFIX="$(dirname "$SCRIPT_DIR")"
+    SHARE_DIR="$PREFIX/share/leaf-downloader"
+
+    if [ -d "$SHARE_DIR" ]; then
+        export PYTHONPATH="$SHARE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+        exec python3 "$SHARE_DIR/main.py" "$@"
+    else
+        # Development mode: run from source tree
+        SOURCE_DIR="$(dirname "$SCRIPT_DIR")"
+        if [ -f "$SOURCE_DIR/main.py" ]; then
+            export PYTHONPATH="$SOURCE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+            exec python3 "$SOURCE_DIR/main.py" "$@"
+        else
+            echo "Error: Cannot find Leaf Downloader installation." >&2
+            exit 1
+        fi
+    fi
+fi

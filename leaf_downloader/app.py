@@ -10,7 +10,7 @@ from leaf_downloader.ui.download_confirm_dialog import DownloadConfirmDialog
 
 class LeafDownloaderApp(Adw.Application):
     def __init__(self):
-        super().__init__(application_id='com.example.LeafDownloader',
+        super().__init__(application_id='io.github.hasan_psl.LeafDownloader',
                          flags=Gio.ApplicationFlags.FLAGS_NONE)
         self.api_server = None
 

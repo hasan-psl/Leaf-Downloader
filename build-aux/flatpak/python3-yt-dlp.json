@@ -1,0 +1,15 @@
+{
+    "name": "python3-yt-dlp",
+    "buildsystem": "simple",
+    "build-commands": [
+        "pip3 install --verbose --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} yt-dlp"
+    ],
+    "sources": [
+        {
+            "type": "url",
+            "url": "https://files.pythonhosted.org/packages/d1/58/5ab38ae1ae3bd22c79e411da37aa03fcc914c73570ec74e7a8d197d0b4a60/yt_dlp-2025.3.31-py3-none-any.whl",
+            "sha256": "FIXME_RUN_FLATPAK_PIP_GENERATOR"
+        }
+    ],
+    "_comment": "This is a placeholder. For production builds, regenerate with: flatpak-pip-generator --runtime-version=49 --yaml yt-dlp"
+}

@@ -37,3 +37,12 @@ downloads.json
 queue.json
 settings.json
 history.json
+dev-guide.md
+
+# Flatpak build directories
+.flatpak-builder/
+build-dir/
+
+# Temporary direct download engine files
+*.leafdl
+*.part*

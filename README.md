@@ -149,24 +149,72 @@ All settings are managed by a singleton `ConfigManager` and persisted in `~/.con
 Make sure you have the following installed on your system:
 - Python 3.10 or higher
 - PyGObject (for GTK4 bindings)
-- Libadwaita development libraries (`libadwaita-1-dev`)
-- AyatanaAppIndicator3 (`gir1.2-ayatanaappindicator3-0.1`) — for the system tray
+- Libadwaita development libraries (`libadwaita-1-dev` / `libadwaita`)
+- AyatanaAppIndicator3 (`gir1.2-ayatanaappindicator3-0.1` / `libayatana-appindicator3-devel`) — for the system tray (native installs only)
 - `pip` for Python packages
+- `flatpak` and `flatpak-builder` (if building/running via Flatpak)
 
-### Installation
+---
 
-1. **Clone the repository:**
+### Installation & Run Options
+
+#### Option A: Flatpak (Recommended for Ubuntu 26.04 & Fedora)
+Flatpak bundles all dependencies (including `yt-dlp` and `ffmpeg`) in a secure sandbox.
+
+1. **Install Flatpak builder tools**:
    ```bash
-   git clone https://github.com/hasan-psl/Leaf-Downloader.git
-   cd Leaf-Downloader
+   # Ubuntu / Debian
+   sudo apt install flatpak flatpak-builder
+   
+   # Fedora
+   sudo dnf install flatpak flatpak-builder
    ```
 
-2. **Install Python dependencies:**
+2. **Add Flathub remote** (if not already added):
+   ```bash
+   flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+   ```
+
+3. **Install the GNOME 49 Sdk and Platform**:
+   ```bash
+   flatpak install flathub org.gnome.Platform//49 org.gnome.Sdk//49
+   ```
+
+4. **Build and install locally**:
+   ```bash
+   make flatpak-install
+   ```
+
+5. **Run the application**:
+   ```bash
+   make flatpak-run
+   ```
+
+#### Option B: System Install (via Makefile)
+Install system-wide to `/usr/local` (or a custom prefix).
+
+1. **Install Python dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Run Leaf-Downloader:**
+2. **Install to system**:
+   ```bash
+   sudo make install
+   ```
+   *Note: You can override the prefix with `sudo make install PREFIX=/usr`.*
+
+3. **Run**:
+   ```bash
+   leaf-downloader
+   ```
+
+#### Option C: Run from Source (Development)
+1. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. **Run direct**:
    ```bash
    python main.py
    ```
@@ -189,9 +237,10 @@ The Firefox extension must currently be loaded manually as a temporary add-on:
 
 ## 🗺️ Roadmap & Future Plans
 
-Leaf-Downloader is currently in a highly functional **Beta** phase. Upcoming plans include:
+Leaf-Downloader is currently in a highly functional **Beta** phase:
 
-- [ ] 📦 **Official Packaging**: Proper `.deb` Debian packages and portable `AppImage` releases for easy installation across all distributions.
+- [x] 📦 **Official Packaging**: Flatpak packaging and Makefile setup for Ubuntu, Fedora, and other distributions.
+- [ ] 📦 **Additional Packages**: Native `.deb` Debian packages and portable `AppImage` releases.
 - [ ] 🦊 **Firefox Web Store**: Publishing the extension to the official Mozilla Add-ons store for one-click installation.
 - [ ] 🌐 **Chromium Support**: Expanding the browser extension to support Google Chrome, Brave, and Edge.
 - [ ] 🎨 **Continued Polish**: Smooth micro-animations, additional platform support, and further UI/UX refinements.

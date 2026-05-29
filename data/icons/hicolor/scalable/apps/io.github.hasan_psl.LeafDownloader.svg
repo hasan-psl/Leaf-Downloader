@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2d2d2d"/>
+      <stop offset="100%" stop-color="#1a1a1a"/>
+    </linearGradient>
+    <linearGradient id="leafGrad" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#6ECB63"/>
+      <stop offset="50%" stop-color="#4CAF50"/>
+      <stop offset="100%" stop-color="#2E7D32"/>
+    </linearGradient>
+    <linearGradient id="arrowGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E0E0E0"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="4" y="4" width="120" height="120" rx="28" ry="28" fill="url(#bgGrad)" stroke="#3a3a3a" stroke-width="1"/>
+
+  <!-- Leaf shape -->
+  <g filter="url(#shadow)">
+    <path d="M 88 28
+             C 88 28, 42 30, 32 70
+             C 28 82, 30 92, 36 98
+             C 38 100, 42 100, 44 98
+             C 52 90, 54 78, 56 68
+             C 60 52, 72 38, 88 28 Z"
+          fill="url(#leafGrad)" opacity="0.95"/>
+
+    <!-- Leaf vein (center) -->
+    <path d="M 82 34 C 70 50, 52 68, 40 94"
+          stroke="#1B5E20" stroke-width="2" fill="none" opacity="0.5" stroke-linecap="round"/>
+
+    <!-- Leaf veins (side) -->
+    <path d="M 72 42 C 64 52, 54 58, 44 62"
+          stroke="#1B5E20" stroke-width="1.2" fill="none" opacity="0.35" stroke-linecap="round"/>
+    <path d="M 64 52 C 58 62, 48 72, 42 78"
+          stroke="#1B5E20" stroke-width="1.2" fill="none" opacity="0.35" stroke-linecap="round"/>
+  </g>
+
+  <!-- Download arrow -->
+  <g filter="url(#shadow)">
+    <!-- Arrow shaft -->
+    <rect x="68" y="48" width="10" height="30" rx="2" fill="url(#arrowGrad)" opacity="0.95"/>
+    <!-- Arrow head -->
+    <polygon points="73,86 58,70 66,70 66,78 80,78 80,70 88,70" fill="url(#arrowGrad)" opacity="0.95"/>
+  </g>
+</svg>
