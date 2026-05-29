@@ -1,7 +1,7 @@
 # Leaf Downloader — Build & Installation Makefile
 # ==================================================
 
-APP_ID = io.github.hasan_psl.LeafDownloader
+APP_ID = io.github.hasan_psl.Leaf-Downloader
 PREFIX ?= /usr/local
 DESTDIR ?=
 

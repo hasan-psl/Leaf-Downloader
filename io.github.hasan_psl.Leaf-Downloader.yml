@@ -2,7 +2,7 @@
 # Build with: flatpak-builder --force-clean --user --install build-dir io.github.hasan_psl.LeafDownloader.yml
 # Run with:   flatpak run io.github.hasan_psl.LeafDownloader
 
-app-id: io.github.hasan_psl.LeafDownloader
+app-id: io.github.hasan_psl.Leaf-Downloader
 runtime: org.gnome.Platform
 runtime-version: '49'
 sdk: org.gnome.Sdk
@@ -20,11 +20,9 @@ finish-args:
 
   # Filesystem access
   - --filesystem=xdg-download
-  - --filesystem=xdg-config/Leaf-Downloader:create
 
   # Desktop integration
   - --talk-name=org.freedesktop.Notifications
-  - --talk-name=org.freedesktop.portal.*
 
 cleanup:
   - /include
@@ -76,7 +74,7 @@ modules:
     build-commands:
       - pip3 install --no-build-isolation --no-deps --prefix=/app yt-dlp*.whl
     sources:
-      - type: url
+      - type: file
         url: https://files.pythonhosted.org/packages/cd/13/5093bcb954878e50f7217fd2ab94282b53934022e4e4a03265582da83bf5/yt_dlp-2026.3.17-py3-none-any.whl
         sha256: 32992db94303a8a5d211a183f2174834fe7f8c29d83ed2e7a324eae97a8f26d8
         dest-filename: yt-dlp.whl
@@ -95,21 +93,21 @@ modules:
       - cp -r main.py leaf_downloader /app/share/leaf-downloader/
 
       # Install the desktop entry
-      - install -Dm644 data/io.github.hasan_psl.LeafDownloader.desktop
-          /app/share/applications/io.github.hasan_psl.LeafDownloader.desktop
+      - install -Dm644 data/io.github.hasan_psl.Leaf-Downloader.desktop
+          /app/share/applications/io.github.hasan_psl.Leaf-Downloader.desktop
 
       # Install the AppStream metainfo
-      - install -Dm644 data/io.github.hasan_psl.LeafDownloader.metainfo.xml
-          /app/share/metainfo/io.github.hasan_psl.LeafDownloader.metainfo.xml
+      - install -Dm644 data/io.github.hasan_psl.Leaf-Downloader.metainfo.xml
+          /app/share/metainfo/io.github.hasan_psl.Leaf-Downloader.metainfo.xml
 
       # Install icons (scalable SVG + pre-rendered PNGs)
-      - install -Dm644 data/icons/io.github.hasan_psl.LeafDownloader.svg
-          /app/share/icons/hicolor/scalable/apps/io.github.hasan_psl.LeafDownloader.svg
+      - install -Dm644 data/icons/io.github.hasan_psl.Leaf-Downloader.svg
+          /app/share/icons/hicolor/scalable/apps/io.github.hasan_psl.Leaf-Downloader.svg
       - |
         for size in 48 64 128 256; do
-          if [ -f "data/icons/hicolor/${size}x${size}/apps/io.github.hasan_psl.LeafDownloader.png" ]; then
-            install -Dm644 "data/icons/hicolor/${size}x${size}/apps/io.github.hasan_psl.LeafDownloader.png" \
-              "/app/share/icons/hicolor/${size}x${size}/apps/io.github.hasan_psl.LeafDownloader.png"
+          if [ -f "data/icons/hicolor/${size}x${size}/apps/io.github.hasan_psl.Leaf-Downloader.png" ]; then
+            install -Dm644 "data/icons/hicolor/${size}x${size}/apps/io.github.hasan_psl.Leaf-Downloader.png" \
+              "/app/share/icons/hicolor/${size}x${size}/apps/io.github.hasan_psl.Leaf-Downloader.png"
           fi
         done
 

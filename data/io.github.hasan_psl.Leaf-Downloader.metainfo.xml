@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Copyright 2026 Khondokar Shazid Hassan -->
 <component type="desktop-application">
-  <id>io.github.hasan_psl.LeafDownloader</id>
+  <id>io.github.hasan_psl.Leaf-Downloader</id>
 
   <name>Leaf Downloader</name>
   <summary>Modern download manager for Linux with yt-dlp integration</summary>
@@ -36,7 +36,7 @@
   <url type="bugtracker">https://github.com/hasan-psl/Leaf-Downloader/issues</url>
   <url type="vcs-browser">https://github.com/hasan-psl/Leaf-Downloader</url>
 
-  <launchable type="desktop-id">io.github.hasan_psl.LeafDownloader.desktop</launchable>
+  <launchable type="desktop-id">io.github.hasan_psl.Leaf-Downloader.desktop</launchable>
 
   <branding>
     <color type="primary" scheme_preference="light">#6ECB63</color>
