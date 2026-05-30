@@ -1,0 +1,102 @@
+name: Build Debian Package
+
+# Runs on every push to main and every pull request targeting main.
+# Validates that the package builds cleanly and passes lintian,
+# then uploads the .deb as a downloadable workflow artifact.
+#
+# This workflow does NOT create a GitHub Release.
+# See release.yml for the release workflow (triggered by v* tags).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-deb:
+    name: Build .deb (Ubuntu ${{ matrix.ubuntu }})
+    runs-on: ubuntu-${{ matrix.ubuntu }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Build on the two active LTS releases.
+        # Ubuntu 22.04 (Jammy) is the minimum — first LTS with GTK4 in-repo.
+        # Ubuntu 24.04 (Noble) is the current LTS.
+        ubuntu: ["22.04", "24.04"]
+
+    steps:
+      # ----------------------------------------------------------------
+      # 1. Checkout source
+      # ----------------------------------------------------------------
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so dpkg-parsechangelog works
+
+      # ----------------------------------------------------------------
+      # 2. Install Debian build toolchain
+      # ----------------------------------------------------------------
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            debhelper \
+            devscripts \
+            lintian \
+            python3-pip \
+            fakeroot
+
+      # ----------------------------------------------------------------
+      # 3. Verify debian/rules is executable (git may strip the bit)
+      # ----------------------------------------------------------------
+      - name: Ensure debian/rules is executable
+        run: chmod +x debian/rules
+
+      # ----------------------------------------------------------------
+      # 4. Build the binary .deb package
+      #    dpkg-buildpackage places output files in the parent directory
+      #    of the source tree (one level up from GITHUB_WORKSPACE).
+      # ----------------------------------------------------------------
+      - name: Build Debian package
+        run: dpkg-buildpackage --no-sign -b
+
+      # ----------------------------------------------------------------
+      # 5. Collect the .deb into a local dist/ directory
+      # ----------------------------------------------------------------
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          find "${{ github.workspace }}/.." -maxdepth 1 \
+            \( -name 'leaf-downloader_*.deb' \
+            -o -name 'leaf-downloader_*.buildinfo' \
+            -o -name 'leaf-downloader_*.changes' \) \
+            -exec cp -v {} dist/ \;
+          echo "--- Contents of dist/ ---"
+          ls -lh dist/
+
+      # ----------------------------------------------------------------
+      # 6. Run lintian — warn on issues, fail on errors.
+      #    Tags overridden in debian/leaf-downloader.lintian-overrides
+      #    are excluded from the error count.
+      # ----------------------------------------------------------------
+      - name: Run lintian
+        run: |
+          lintian \
+            --fail-on error \
+            --suppress-tags \
+              no-manual-page,python-module-in-wrong-location \
+            dist/leaf-downloader_*.deb
+        continue-on-error: false
+
+      # ----------------------------------------------------------------
+      # 7. Upload .deb as a workflow artifact (30-day retention)
+      # ----------------------------------------------------------------
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: leaf-downloader-deb-ubuntu-${{ matrix.ubuntu }}
+          path: dist/leaf-downloader_*.deb
+          retention-days: 30
+          if-no-files-found: error

@@ -1,0 +1,108 @@
+#!/usr/bin/make -f
+# debian/rules — Leaf Downloader packaging rules
+#
+# Uses debhelper v13 dh sequencer.  Only the steps that need custom
+# behaviour are overridden; dh handles everything else (strip, fixperms,
+# gencontrol, builddeb, lintian …).
+#
+# Design notes:
+#   - yt-dlp is downloaded as an official PyPI wheel at *build time* and
+#     installed into /usr/lib/leaf-downloader/vendor/ inside the package.
+#     No network access is required at install or run time.
+#   - All application files are placed by the upstream Makefile via
+#     "make install DESTDIR=… PREFIX=/usr".  We reuse it to avoid
+#     divergence between the Makefile and Debian installs.
+#   - Architecture: all — pure Python, no compiled extensions.
+
+export DH_VERBOSE := 1
+
+# ---------------------------------------------------------------------------
+# Pinned yt-dlp wheel — update both values together for each yt-dlp release.
+# ---------------------------------------------------------------------------
+YT_DLP_VERSION := 2026.3.17
+YT_DLP_WHEEL   := yt_dlp-$(YT_DLP_VERSION)-py3-none-any.whl
+YT_DLP_SHA256  := 32992db94303a8a5d211a183f2174834fe7f8c29d83ed2e7a324eae97a8f26d8
+YT_DLP_URL     := https://files.pythonhosted.org/packages/cd/13/5093bcb954878e50f7217fd2ab94282b53934022e4e4a03265582da83bf5/$(YT_DLP_WHEEL)
+
+# Staging paths inside the build tree.
+WHEEL_CACHE    := $(CURDIR)/debian/vendor-wheels
+VENDOR_STAGING := $(CURDIR)/debian/leaf-downloader/usr/lib/leaf-downloader/vendor
+
+# ---------------------------------------------------------------------------
+# Main dh entry point — delegates all standard targets to dh.
+# ---------------------------------------------------------------------------
+%:
+	dh $@
+
+# ---------------------------------------------------------------------------
+# BUILD PHASE — download and verify the yt-dlp wheel.
+#
+# We skip the download if the wheel is already cached (e.g. by the Makefile
+# "deb-fetch-deps" target) so that offline builds remain possible.
+# ---------------------------------------------------------------------------
+override_dh_auto_build:
+	@echo "==> [Leaf] Checking yt-dlp wheel cache …"
+	@mkdir -p $(WHEEL_CACHE)
+	@if [ ! -f "$(WHEEL_CACHE)/$(YT_DLP_WHEEL)" ]; then \
+	    echo "==> [Leaf] Downloading yt-dlp $(YT_DLP_VERSION) from PyPI …"; \
+	    python3 -c "\
+import urllib.request; \
+urllib.request.urlretrieve('$(YT_DLP_URL)', '$(WHEEL_CACHE)/$(YT_DLP_WHEEL)')"; \
+	else \
+	    echo "==> [Leaf] Using cached wheel: $(WHEEL_CACHE)/$(YT_DLP_WHEEL)"; \
+	fi
+	@echo "==> [Leaf] Verifying SHA-256 …"
+	@python3 -c "\
+import hashlib, sys; \
+path = '$(WHEEL_CACHE)/$(YT_DLP_WHEEL)'; \
+digest = hashlib.sha256(open(path, 'rb').read()).hexdigest(); \
+expected = '$(YT_DLP_SHA256)'; \
+ok = digest == expected; \
+print(f'  got:      {digest}'); \
+print(f'  expected: {expected}'); \
+sys.exit(0 if ok else 1)"
+	@echo "==> [Leaf] Wheel verified OK."
+
+# ---------------------------------------------------------------------------
+# TEST PHASE — no automated test suite yet; skip.
+# ---------------------------------------------------------------------------
+override_dh_auto_test:
+	@echo "==> [Leaf] No test suite — skipping."
+
+# ---------------------------------------------------------------------------
+# INSTALL PHASE — two steps:
+#   1. Call the upstream Makefile to place application files.
+#   2. Unpack the vendored wheel into the package vendor directory.
+# ---------------------------------------------------------------------------
+override_dh_auto_install:
+	@echo "==> [Leaf] Installing application files via upstream Makefile …"
+	$(MAKE) install \
+	    DESTDIR=$(CURDIR)/debian/leaf-downloader \
+	    PREFIX=/usr
+	@echo "==> [Leaf] Installing vendored yt-dlp into package …"
+	mkdir -p $(VENDOR_STAGING)
+	pip3 install \
+	    --no-build-isolation \
+	    --no-deps \
+	    --no-index \
+	    --quiet \
+	    --target=$(VENDOR_STAGING) \
+	    $(WHEEL_CACHE)/$(YT_DLP_WHEEL)
+	@echo "==> [Leaf] Removing pip dist-info (not needed at runtime) …"
+	find $(VENDOR_STAGING) -maxdepth 1 -name "*.dist-info" -type d \
+	    -exec rm -rf {} + 2>/dev/null || true
+	find $(VENDOR_STAGING) -maxdepth 1 -name "*.data" -type d \
+	    -exec rm -rf {} + 2>/dev/null || true
+	@echo "==> [Leaf] Removing __pycache__ directories from vendor …"
+	find $(VENDOR_STAGING) -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+	@echo "==> [Leaf] Removing vendored CLI binary (app uses system yt-dlp via subprocess) …"
+	rm -rf $(VENDOR_STAGING)/bin
+	@echo "==> [Leaf] Install phase complete."
+
+# ---------------------------------------------------------------------------
+# CLEAN PHASE — remove the wheel cache and any upstream build artefacts.
+# ---------------------------------------------------------------------------
+override_dh_auto_clean:
+	rm -rf $(WHEEL_CACHE)
+	$(MAKE) clean 2>/dev/null || true
+	dh_auto_clean

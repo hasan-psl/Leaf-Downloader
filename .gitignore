@@ -46,3 +46,22 @@ build-dir/
 # Temporary direct download engine files
 *.leafdl
 *.part*
+
+# Debian packaging — build artefacts (never commit these)
+# Wheel download cache for offline builds (pre-fetched by make deb-fetch-deps)
+debian/vendor-wheels/
+# debhelper staging tree and generated files
+debian/.debhelper/
+debian/leaf-downloader/
+debian/files
+debian/*.substvars
+debian/*.debhelper.log
+debian/debhelper-build-stamp
+# Built package output directory
+dist/
+*.deb
+*.buildinfo
+*.changes
+*.dsc
+*.tar.gz
+*.tar.xz

@@ -4,6 +4,7 @@ import subprocess
 import json
 import urllib.request
 import re
+import sys
 from gi.repository import Gtk, Adw, GLib, Gio, GdkPixbuf, Gdk
 
 from leaf_downloader.ui.download_confirm_dialog import DownloadConfirmDialog
@@ -218,7 +219,7 @@ class NewDownloadDialog(Adw.Dialog):
         
     def _fetch_metadata(self, url):
         try:
-            cmd = ["yt-dlp", "--dump-json", "--no-playlist", url]
+            cmd = [sys.executable, "-m", "yt_dlp", "--dump-json", "--no-playlist", url]
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             stdout, stderr = process.communicate()
             

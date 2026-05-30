@@ -1,0 +1,15 @@
+leaf-downloader (0.1.0-1) unstable; urgency=medium
+
+  * Initial Debian packaging.
+  * Vendors yt-dlp 2026.3.17 (pinned, SHA-256 verified at build time)
+    into /usr/lib/leaf-downloader/vendor/ to avoid any runtime pip
+    installation.
+  * Launcher script (bin/leaf-downloader) prepends vendor directory to
+    PYTHONPATH at startup so the vendored yt-dlp is found transparently.
+  * Declares hard Depends on python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1
+    (all available in Ubuntu 22.04 LTS / Jammy and later).
+  * Recommends ffmpeg (required only for DASH stream muxing via yt-dlp)
+    and gir1.2-ayatanaappindicator3-0.1 (optional system tray icon).
+  * Installs .desktop entry, AppStream metainfo, and hicolor icon set.
+
+ -- Khondokar Shazid Hassan <hasan.psl@users.noreply.github.com>  Sat, 30 May 2026 07:00:00 +0000

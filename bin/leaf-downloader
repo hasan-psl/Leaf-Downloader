@@ -1,26 +1,52 @@
 #!/bin/bash
 # Leaf Downloader launcher script
-# This script sets up the Python path and launches the application.
+# Sets up PYTHONPATH and launches the application.
+#
+# Execution contexts handled:
+#   1. Flatpak sandbox  (/app/share/leaf-downloader exists)
+#   2. System .deb install  (PREFIX/share/leaf-downloader exists)
+#      → also prepends /usr/lib/leaf-downloader/vendor so that the
+#        vendored yt-dlp bundled in the .deb is found transparently,
+#        without touching system site-packages.
+#   3. Development mode  (running directly from source tree)
 
-# Determine the application's installation prefix
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# For Flatpak: modules are in /app/lib/pythonX.Y/site-packages
-# For system installs: modules are relative to the script
+# Path where the .deb installs the vendored Python packages (yt-dlp etc.).
+# This directory is only present on system installs; it is a no-op elsewhere.
+VENDOR_DIR="/usr/lib/leaf-downloader/vendor"
+
 if [ -d "/app/share/leaf-downloader" ]; then
-    # Running inside Flatpak sandbox
+    # ----------------------------------------------------------------
+    # Context 1: Flatpak sandbox
+    # yt-dlp is installed into /app via the Flatpak manifest.
+    # ----------------------------------------------------------------
     export PYTHONPATH="/app/share/leaf-downloader${PYTHONPATH:+:$PYTHONPATH}"
     exec python3 /app/share/leaf-downloader/main.py "$@"
+
 else
-    # Running from system install or development
     PREFIX="$(dirname "$SCRIPT_DIR")"
     SHARE_DIR="$PREFIX/share/leaf-downloader"
 
     if [ -d "$SHARE_DIR" ]; then
+        # ------------------------------------------------------------
+        # Context 2: System install (e.g. installed from .deb)
+        #
+        # Prepend the vendor directory FIRST so that the bundled
+        # yt-dlp takes priority over anything in system site-packages.
+        # This guarantees the pinned, tested version is always used.
+        # ------------------------------------------------------------
+        if [ -d "$VENDOR_DIR" ]; then
+            export PYTHONPATH="$VENDOR_DIR${PYTHONPATH:+:$PYTHONPATH}"
+        fi
         export PYTHONPATH="$SHARE_DIR${PYTHONPATH:+:$PYTHONPATH}"
         exec python3 "$SHARE_DIR/main.py" "$@"
+
     else
-        # Development mode: run from source tree
+        # ------------------------------------------------------------
+        # Context 3: Development mode — run straight from source tree.
+        # Install yt-dlp in your venv or system Python for this to work.
+        # ------------------------------------------------------------
         SOURCE_DIR="$(dirname "$SCRIPT_DIR")"
         if [ -f "$SOURCE_DIR/main.py" ]; then
             export PYTHONPATH="$SOURCE_DIR${PYTHONPATH:+:$PYTHONPATH}"

@@ -108,8 +108,9 @@ class DownloadTask:
         # Build output template: user-edited name with static ext
         out_template = f"{self.title}.%(ext)s"
             
+        import sys
         cmd = [
-            "yt-dlp",
+            sys.executable, "-m", "yt_dlp",
             "--newline",
             "-P", self.dest_dir,
             "-o", out_template

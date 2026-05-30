@@ -1,0 +1,23 @@
+# lintian overrides for leaf-downloader
+# ==========================================
+# These overrides silence known false-positive or intentionally accepted
+# lintian tags for this package.  Each entry has a comment explaining why
+# the override is justified.
+
+# No manual page for the launcher binary.
+# Leaf Downloader is a GUI application launched from a .desktop file;
+# a man page is not expected by end users.
+leaf-downloader: no-manual-page [usr/bin/leaf-downloader]
+
+# This package is distributed via GitHub Releases, not through the Debian
+# archive.  It is therefore not expected to close an ITP bug on upload.
+leaf-downloader: initial-upload-closes-no-bugs
+
+# The vendored yt-dlp package lives under /usr/lib/leaf-downloader/vendor/
+# rather than the standard Python site-packages path.  This is intentional:
+# it keeps the vendored copy isolated from system Python packages.
+leaf-downloader: python-module-in-wrong-location [usr/lib/leaf-downloader/vendor/*]
+
+# The application Python files live under /usr/share/leaf-downloader/.
+# This matches the pattern used by many GTK Python applications.
+leaf-downloader: python-module-in-wrong-location [usr/share/leaf-downloader/*]

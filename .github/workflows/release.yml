@@ -1,0 +1,158 @@
+name: Release
+
+# Triggered when a version tag matching v*.*.* is pushed.
+# Builds the .deb, runs lintian, then creates a GitHub Release and
+# attaches the package file automatically.
+#
+# Tagging convention:
+#   git tag -a v0.1.0 -m "Release 0.1.0"
+#   git push origin v0.1.0
+#
+# The tag version MUST match the version in debian/changelog.
+# Pre-release tags (alpha/beta/rc) are marked as pre-releases on GitHub.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'        # stable: v1.2.3
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'      # pre-release: v1.2.3-beta1, v1.2.3-rc1
+
+jobs:
+  build-and-release:
+    name: Build .deb and Publish Release
+    runs-on: ubuntu-24.04   # use the latest LTS for release builds
+    permissions:
+      contents: write       # required to create and upload release assets
+
+    steps:
+      # ----------------------------------------------------------------
+      # 1. Checkout source (full history for dpkg-parsechangelog)
+      # ----------------------------------------------------------------
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ----------------------------------------------------------------
+      # 2. Parse version from the pushed tag
+      # ----------------------------------------------------------------
+      - name: Extract version from tag
+        id: version
+        run: |
+          RAW_TAG="${GITHUB_REF_NAME}"          # e.g. v0.1.0 or v0.2.0-beta1
+          VERSION="${RAW_TAG#v}"                # strip leading 'v'
+          echo "raw_tag=${RAW_TAG}"   >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}"   >> "$GITHUB_OUTPUT"
+          # Detect pre-release: tag contains a hyphen suffix
+          if [[ "$RAW_TAG" =~ -(alpha|beta|rc) ]]; then
+            echo "prerelease=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Tag: ${RAW_TAG}  →  Version: ${VERSION}  (prerelease: ${{ steps.version.outputs.prerelease }})"
+
+      # ----------------------------------------------------------------
+      # 3. Validate that changelog version matches the tag
+      # ----------------------------------------------------------------
+      - name: Validate changelog version
+        run: |
+          CHANGELOG_VERSION=$(dpkg-parsechangelog --show-field Version | sed 's/-[0-9]*$//')
+          TAG_VERSION="${{ steps.version.outputs.version }}"
+          # Strip pre-release suffix for comparison (v0.1.0-beta1 → 0.1.0)
+          TAG_BASE="${TAG_VERSION%%-*}"
+          if [ "$CHANGELOG_VERSION" != "$TAG_BASE" ]; then
+            echo "ERROR: debian/changelog version '${CHANGELOG_VERSION}'" \
+                 "does not match tag base version '${TAG_BASE}'"
+            exit 1
+          fi
+          echo "✓ Changelog version (${CHANGELOG_VERSION}) matches tag (${TAG_BASE})"
+
+      # ----------------------------------------------------------------
+      # 4. Install Debian build toolchain
+      # ----------------------------------------------------------------
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            debhelper \
+            devscripts \
+            lintian \
+            python3-pip \
+            fakeroot
+
+      # ----------------------------------------------------------------
+      # 5. Ensure debian/rules is executable
+      # ----------------------------------------------------------------
+      - name: Ensure debian/rules is executable
+        run: chmod +x debian/rules
+
+      # ----------------------------------------------------------------
+      # 6. Build the binary .deb package
+      # ----------------------------------------------------------------
+      - name: Build Debian package
+        run: dpkg-buildpackage --no-sign -b
+
+      # ----------------------------------------------------------------
+      # 7. Collect build artefacts
+      # ----------------------------------------------------------------
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          find "${{ github.workspace }}/.." -maxdepth 1 \
+            \( -name 'leaf-downloader_*.deb' \
+            -o -name 'leaf-downloader_*.buildinfo' \
+            -o -name 'leaf-downloader_*.changes' \) \
+            -exec cp -v {} dist/ \;
+          echo "--- Release artefacts ---"
+          ls -lh dist/
+
+      # ----------------------------------------------------------------
+      # 8. Run lintian — release builds must be error-free
+      # ----------------------------------------------------------------
+      - name: Run lintian
+        run: |
+          lintian \
+            --fail-on error \
+            --suppress-tags \
+              no-manual-page,python-module-in-wrong-location \
+            dist/leaf-downloader_*.deb
+
+      # ----------------------------------------------------------------
+      # 9. Create the GitHub Release and upload the .deb
+      #
+      #    softprops/action-gh-release handles:
+      #      - Creating the release if it does not exist
+      #      - Marking it as a pre-release based on our flag
+      #      - Attaching all files matching the glob
+      #      - Auto-generating release notes from merged PRs / commits
+      # ----------------------------------------------------------------
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Leaf Downloader ${{ steps.version.outputs.raw_tag }}"
+          tag_name: ${{ steps.version.outputs.raw_tag }}
+          files: |
+            dist/leaf-downloader_*.deb
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          body: |
+            ## Installation
+
+            Download the `.deb` file below and install it with:
+
+            ```bash
+            sudo dpkg -i leaf-downloader_${{ steps.version.outputs.version }}_all.deb
+            sudo apt-get install -f   # resolve any missing system dependencies
+            ```
+
+            ### Requirements
+            - Ubuntu 22.04 LTS (Jammy) or later
+            - GTK4 and Libadwaita (installed automatically via `apt-get install -f`)
+
+            ### What's included
+            - yt-dlp `2026.3.17` vendored inside the package — no separate installation needed.
+            - Full GNOME desktop integration: `.desktop` entry, AppStream metainfo, hicolor icons.
+
+            ---
+            *Release built automatically by GitHub Actions from tag `${{ steps.version.outputs.raw_tag }}`.*

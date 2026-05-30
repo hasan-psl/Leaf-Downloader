@@ -1,0 +1,11 @@
+version=4
+# Monitor upstream GitHub releases for new versions.
+# uscan will look for tags matching vX.Y.Z and map them to the
+# upstream version X.Y.Z for the Debian changelog.
+#
+# Usage: uscan --verbose
+opts=\
+filenamemangle=s/.+\/v?(\d\S+)\.tar\.gz/leaf-downloader-$1\.tar\.gz/,\
+uversionmangle=s/(\d)[_\.\-\+]?(beta|b|rc|RC|alpha|a)(\d*)$/$1~$2$3/ \
+https://github.com/hasan-psl/Leaf-Downloader/tags \
+.*/v?(\d[\d.]+)\.tar\.gz debian
