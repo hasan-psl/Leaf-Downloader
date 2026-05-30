@@ -21,10 +21,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Build on the two active LTS releases.
+        # Build on the three active LTS releases.
         # Ubuntu 22.04 (Jammy) is the minimum — first LTS with GTK4 in-repo.
         # Ubuntu 24.04 (Noble) is the current LTS.
-        ubuntu: ["22.04", "24.04"]
+        # Ubuntu 26.04 (Noble) is the current LTS.
+        ubuntu: ["22.04", "24.04", "26.04"]
 
     steps:
       # ----------------------------------------------------------------
@@ -42,6 +43,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
+            build-essential \
             debhelper \
             devscripts \
             lintian \
