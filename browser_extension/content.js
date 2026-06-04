@@ -42,6 +42,11 @@ async function callApi(endpoint, method, body) {
 // Utilities
 // ---------------------------------------------------------------------------
 
+function setSafeHTML(element, htmlString) {
+  const doc = new DOMParser().parseFromString(htmlString, "text/html");
+  element.replaceChildren(...doc.body.childNodes);
+}
+
 function formatBytes(bytes) {
   if (!bytes) return "Unknown size";
   const mb = bytes / (1024 * 1024);
@@ -374,14 +379,14 @@ function createDownloadButton() {
   btn.title = "Download with Leaf";
   btn.setAttribute("aria-label", "Download with Leaf Downloader");
 
-  btn.innerHTML = `
+  setSafeHTML(btn, `
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="leaf-dl-icon">
       <path d="M12 3v12"/>
       <path d="M8 11l4 4 4-4"/>
       <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
       <circle cx="12" cy="3" r="1" fill="currentColor" stroke="none"/>
     </svg>
-  `;
+  `);
 
   btn.addEventListener("click", handleDownloadClick);
   return btn;
@@ -450,7 +455,7 @@ function showYouTubePopup(player) {
   const popup = document.createElement("div");
   popup.id = POPUP_ID;
   popup.className = "leaf-popup-card leaf-fade-in";
-  popup.innerHTML = buildPopupSkeleton();
+  setSafeHTML(popup, buildPopupSkeleton());
   attachCloseBtn(popup);
 
   player.appendChild(popup);
@@ -563,17 +568,17 @@ function renderMetadata(data, popup, downloadUrl) {
   const content = popup.querySelector(".leaf-popup-content");
 
   if (header) {
-    header.innerHTML = `
+    setSafeHTML(header, `
       ${data.thumbnail ? `<img class="leaf-popup-thumb" src="${data.thumbnail}" alt="Thumbnail" />` : ''}
       <div class="leaf-popup-video-text">
         <h3 class="leaf-popup-title" title="${data.title}">${data.title}</h3>
         <p class="leaf-popup-uploader">${data.uploader || "Direct Link"}</p>
       </div>
-    `;
+    `);
   }
 
   if (!data.formats || data.formats.length === 0) {
-    content.innerHTML = `<div class="leaf-popup-no-formats">No downloadable formats found.</div>`;
+    setSafeHTML(content, `<div class="leaf-popup-no-formats">No downloadable formats found.</div>`);
     return;
   }
 
@@ -650,7 +655,7 @@ function renderMetadata(data, popup, downloadUrl) {
   });
 
   listHtml += `</div>`;
-  content.innerHTML = listHtml;
+  setSafeHTML(content, listHtml);
 
   const formatButtons = content.querySelectorAll(".leaf-format-item");
   formatButtons.forEach(btn => {
@@ -681,10 +686,10 @@ function renderMetadata(data, popup, downloadUrl) {
 async function startDownload(downloadUrl, title, format, resolution, popup, button) {
   button.classList.add("leaf-format-loading");
   const origContent = button.innerHTML;
-  button.innerHTML = `
+  setSafeHTML(button, `
     <div class="leaf-mini-spinner"></div>
     <span style="margin-left: 12px; font-weight: 500;">Starting download...</span>
-  `;
+  `);
 
   try {
     await callApi("/api/download", "POST", {
@@ -696,7 +701,7 @@ async function startDownload(downloadUrl, title, format, resolution, popup, butt
       resolution: resolution
     });
 
-    popup.innerHTML = `
+    setSafeHTML(popup, `
       <div class="leaf-popup-success-container">
         <div class="leaf-success-checkmark">
           <div class="leaf-check-icon">
@@ -709,12 +714,12 @@ async function startDownload(downloadUrl, title, format, resolution, popup, butt
         <h3>Sent to Leaf!</h3>
         <p>Please confirm download in the Leaf app</p>
       </div>
-    `;
+    `);
 
     setTimeout(() => closePopup(popup), 2000);
 
   } catch (err) {
-    button.innerHTML = origContent;
+    setSafeHTML(button, origContent);
     button.classList.remove("leaf-format-loading");
 
     popup.classList.add("leaf-popup-error-shake");
@@ -740,7 +745,7 @@ function renderError(popup, url, isDirectFallback, videoSrcUrl, errorMsg) {
     ? "Please open the Leaf Downloader desktop application and try again." 
     : (errorMsg || "Unable to extract playable video streams from this page.");
 
-  content.innerHTML = `
+  setSafeHTML(content, `
     <div class="leaf-error-container">
       <div class="leaf-error-icon">
         <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -753,12 +758,12 @@ function renderError(popup, url, isDirectFallback, videoSrcUrl, errorMsg) {
       <p style="margin-top: 8px; color: #888; font-size: 13px; line-height: 1.4; padding: 0 15px; word-break: break-word;">${desc}</p>
       <button class="leaf-retry-btn" style="margin-top: 15px;">Retry Connection</button>
     </div>
-  `;
+  `);
 
   const retryBtn = content.querySelector(".leaf-retry-btn");
   retryBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    popup.innerHTML = buildPopupSkeleton();
+    setSafeHTML(popup, buildPopupSkeleton());
     attachCloseBtn(popup);
     fetchMetadata(url, popup, isDirectFallback, videoSrcUrl);
   });
@@ -838,7 +843,7 @@ function createHoverBarFor(video) {
   bar.dataset.leafBarId = barId;
   bar.leafVideo = video;
 
-  bar.innerHTML = `
+  setSafeHTML(bar, `
     <div class="leaf-hover-bar-btn">
       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 5px; flex-shrink: 0;">
         <path d="M12 3v12"/>
@@ -848,7 +853,7 @@ function createHoverBarFor(video) {
       <span>Download Video</span>
     </div>
     <div class="leaf-hover-bar-close" title="Dismiss">&times;</div>
-  `;
+  `);
 
   // Drag-and-drop state variables
   let isDragging = false;
@@ -980,7 +985,7 @@ async function showVideoPopup(video, bar) {
   const popup = document.createElement("div");
   popup.id = POPUP_ID;
   popup.className = "leaf-popup-card leaf-fade-in";
-  popup.innerHTML = buildPopupSkeleton();
+  setSafeHTML(popup, buildPopupSkeleton());
   attachCloseBtn(popup);
 
   document.body.appendChild(popup);
@@ -1092,7 +1097,7 @@ browser.runtime.onMessage.addListener((message) => {
     const popup = document.createElement("div");
     popup.id = POPUP_ID;
     popup.className = "leaf-popup-card leaf-fade-in";
-    popup.innerHTML = buildPopupSkeleton();
+    setSafeHTML(popup, buildPopupSkeleton());
     attachCloseBtn(popup);
 
     document.body.appendChild(popup);
