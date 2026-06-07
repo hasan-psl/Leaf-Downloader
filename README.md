@@ -7,6 +7,13 @@
   ![GTK4 Libadwaita](https://img.shields.io/badge/GTK4-Libadwaita-green?style=for-the-badge)
   ![yt-dlp](https://img.shields.io/badge/Powered%20By-yt--dlp-red?style=for-the-badge&logo=youtube)
   ![License GPLv3](https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge)
+  <br><br>
+  <a href="https://github.com/hasan-psl/Leaf-Downloader/releases">
+    <img src="https://img.shields.io/badge/Debian-Package_Available-A81D33?style=for-the-badge&logo=debian&logoColor=white" alt="Debian Package Available">
+  </a>
+  <a href="https://addons.mozilla.org/en-US/firefox/addon/leaf-downloader/">
+    <img src="https://img.shields.io/badge/Firefox-Get_Extension-FF7139?style=for-the-badge&logo=Firefox-Browser&logoColor=white" alt="Firefox Extension">
+  </a>
 </div>
 
 <br>
@@ -51,7 +58,9 @@ Leaf-Downloader operates two independent download backends that are automaticall
 
 ### 🦊 Smart Firefox Browser Extension (Manifest V3)
 
-Available on the official [Mozilla Add-ons Store](https://addons.mozilla.org/en-US/firefox/addon/leaf-downloader/).
+<a href="https://addons.mozilla.org/en-US/firefox/addon/leaf-downloader/">
+  <img src="https://img.shields.io/badge/Firefox-Get_Extension-FF7139?style=for-the-badge&logo=Firefox-Browser&logoColor=white" alt="Get it on Firefox">
+</a>
 
 A fully functional, feature-rich Firefox extension bridges the browser to the desktop app via a local HTTP API:
 
@@ -198,7 +207,16 @@ Make sure you have the following installed on your system:
 
 ### Installation & Run Options
 
-#### Option A: Flatpak (Recommended for Ubuntu 26.04 & Fedora)
+#### Option A: Debian Package (.deb) (Recommended for Ubuntu/Debian)
+We provide pre-built `.deb` packages generated automatically via a secured GitHub Actions release workflow.
+
+1. Go to the [Releases page](https://github.com/hasan-psl/Leaf-Downloader/releases) and download the latest `.deb` file.
+2. Install it using `apt`:
+   ```bash
+   sudo apt install ./leaf-downloader_*.deb
+   ```
+
+#### Option B: Flatpak (Recommended for Fedora & Immutable Distros)
 Flatpak bundles all dependencies (including `yt-dlp` and `ffmpeg`) in a secure sandbox.
 
 1. **Install Flatpak builder tools**:
@@ -230,7 +248,7 @@ Flatpak bundles all dependencies (including `yt-dlp` and `ffmpeg`) in a secure s
    make flatpak-run
    ```
 
-#### Option B: System Install (via Makefile)
+#### Option C: System Install (via Makefile)
 Install system-wide to `/usr/local` (or a custom prefix).
 
 1. **Install Python dependencies**:
@@ -249,7 +267,7 @@ Install system-wide to `/usr/local` (or a custom prefix).
    leaf-downloader
    ```
 
-#### Option C: Run from Source (Development)
+#### Option D: Run from Source (Development)
 1. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
@@ -263,7 +281,9 @@ Install system-wide to `/usr/local` (or a custom prefix).
 
 ## 🧩 Browser Extension Setup
 
-You can install the official Firefox extension directly from the [Mozilla Add-ons Store](https://addons.mozilla.org/en-US/firefox/addon/leaf-downloader/).
+<a href="https://addons.mozilla.org/en-US/firefox/addon/leaf-downloader/">
+  <img src="https://img.shields.io/badge/Get_it_for_Firefox-FF7139?style=for-the-badge&logo=Firefox-Browser&logoColor=white" alt="Get Leaf-Downloader for Firefox" height="40">
+</a>
 
 Alternatively, if you want to load it manually for development:
 
@@ -285,7 +305,8 @@ Alternatively, if you want to load it manually for development:
 Leaf-Downloader is currently in a highly functional **Beta** phase:
 
 - [x] 📦 **Official Packaging**: Flatpak packaging and Makefile setup for Ubuntu, Fedora, and other distributions.
-- [ ] 📦 **Additional Packages**: Native `.deb` Debian packages and portable `AppImage` releases.
+- [x] 📦 **Debian Packages**: Native `.deb` packages are now automatically generated via our secure GitHub Actions release workflow.
+- [ ] 📦 **AppImage**: Portable `AppImage` releases.
 - [x] 🦊 **Firefox Web Store**: Published the extension to the official [Mozilla Add-ons Store](https://addons.mozilla.org/en-US/firefox/addon/leaf-downloader/) for one-click installation.
 - [ ] 🌐 **Chromium Support**: Expanding the browser extension to support Google Chrome, Brave, and Edge.
 - [ ] 🎨 **Continued Polish**: Smooth micro-animations, additional platform support, and further UI/UX refinements.
