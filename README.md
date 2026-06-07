@@ -51,6 +51,8 @@ Leaf-Downloader operates two independent download backends that are automaticall
 
 ### 🦊 Smart Firefox Browser Extension (Manifest V3)
 
+Available on the official [Mozilla Add-ons Store](https://addons.mozilla.org/en-US/firefox/addon/leaf-downloader/).
+
 A fully functional, feature-rich Firefox extension bridges the browser to the desktop app via a local HTTP API:
 
 - **YouTube Integration**: Injects a native **Download button** directly into the YouTube player controls bar (`ytp-right-controls`). Clicking it shows a rich popup with video thumbnail, title, uploader, and all available format/quality options.
@@ -261,7 +263,9 @@ Install system-wide to `/usr/local` (or a custom prefix).
 
 ## 🧩 Browser Extension Setup
 
-The Firefox extension must currently be loaded manually as a temporary add-on:
+You can install the official Firefox extension directly from the [Mozilla Add-ons Store](https://addons.mozilla.org/en-US/firefox/addon/leaf-downloader/).
+
+Alternatively, if you want to load it manually for development:
 
 1. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`.
 2. Click **"Load Temporary Add-on..."**.
@@ -282,7 +286,7 @@ Leaf-Downloader is currently in a highly functional **Beta** phase:
 
 - [x] 📦 **Official Packaging**: Flatpak packaging and Makefile setup for Ubuntu, Fedora, and other distributions.
 - [ ] 📦 **Additional Packages**: Native `.deb` Debian packages and portable `AppImage` releases.
-- [ ] 🦊 **Firefox Web Store**: Publishing the extension to the official Mozilla Add-ons store for one-click installation.
+- [x] 🦊 **Firefox Web Store**: Published the extension to the official [Mozilla Add-ons Store](https://addons.mozilla.org/en-US/firefox/addon/leaf-downloader/) for one-click installation.
 - [ ] 🌐 **Chromium Support**: Expanding the browser extension to support Google Chrome, Brave, and Edge.
 - [ ] 🎨 **Continued Polish**: Smooth micro-animations, additional platform support, and further UI/UX refinements.
 
